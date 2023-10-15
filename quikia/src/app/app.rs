@@ -19,6 +19,10 @@ impl App{
         self.need_redraw = true;
     }
 
+    pub fn whether_need_redraw(&self) -> bool{
+        self.need_redraw
+    }
+
     pub fn set_need_redraw(&mut self, need_redraw: bool){
         self.need_redraw = need_redraw;
     }
@@ -78,6 +82,10 @@ impl Deref for SharedApp{
 impl SharedApp{
     pub fn need_redraw(&self){
         self.app.lock().unwrap().need_redraw();
+    }
+
+    pub fn whether_need_redraw(&self) -> bool{
+        self.app.lock().unwrap().whether_need_redraw()
     }
 
     pub fn set_need_redraw(&self, need_redraw: bool){
