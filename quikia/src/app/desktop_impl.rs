@@ -23,8 +23,12 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint};
-use crate::app::SharedApp;
+use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color,
+                ColorType, Surface, Paint};
+use winit::dpi::LogicalPosition;
+use winit::event::ElementState;
+use crate::app::{new_app, Page, PageStack, SharedApp};
+use crate::item::{Item, MeasureMode};
 
 struct Env {
     surface: Surface,
@@ -36,7 +40,8 @@ struct Env {
     stencil_size: usize,
 }
 
-fn run(app:SharedApp, mut env:Env, event_loop:EventLoop<()>){
+fn run(app:SharedApp, mut pages:PageStack, mut env:Env, event_loop:EventLoop<()>){
+    let mut cursor_positon=LogicalPosition::new(0.0_f32,0.0_f32);
     event_loop.run(move |event, _, control_flow| {
         let mut needs_redraw = false;
         match event {
@@ -62,6 +67,30 @@ fn run(app:SharedApp, mut env:Env, event_loop:EventLoop<()>){
                         NonZeroU32::new(width.max(1)).unwrap(),
                         NonZeroU32::new(height.max(1)).unwrap(),
                     );
+
+
+                    let width=width as f32/app.scale_factor();
+                    let height=height as f32/app.scale_factor();
+                    pages.iter_mut().for_each(|(_,item)|{
+                        item.measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                        item.layout(0.0, 0.0, width, height);
+                    })
+
+                }
+                WindowEvent::CursorMoved { device_id, position,.. }=>{
+                    let scale_factor=app.scale_factor();
+                    cursor_positon=position.to_logical(scale_factor as f64);
+                }
+                WindowEvent::MouseInput { device_id, state, button, modifiers }=>{
+                    match state {
+                        ElementState::Pressed => {}
+                        ElementState::Released => {
+                            if let Some((_,item))=pages.current_page(){
+                                dispatch_on_click(item, cursor_positon.x, cursor_positon.y);
+                            }
+                        }
+                    }
+                    //println!("{} {}",cursor_positon.x,cursor_positon.y);
                 }
                 WindowEvent::KeyboardInput {
                     input:
@@ -84,13 +113,27 @@ fn run(app:SharedApp, mut env:Env, event_loop:EventLoop<()>){
         needs_redraw=needs_redraw||app.whether_need_redraw();
 
         if needs_redraw{
+            let (width,height)=(app.content_width(),app.content_height());
+            pages.iter_mut().for_each(|(_,item)|{
+                item.measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                item.layout(0.0, 0.0, width, height);
+            });
+
             let canvas = env.surface.canvas();
-            canvas.clear(Color::RED);
+            canvas.save();
+            let scale_factor=app.scale_factor();
+            canvas.scale((scale_factor,scale_factor));
+            canvas.clear(Color::WHITE);
+            
+            if let Some((_,item))=pages.current_page(){
+                item.draw(canvas);
+            }
 
-            canvas.draw_circle((100.0, 100.0), 50.0, &Paint::default().set_color(Color::BLUE));
-
+            canvas.restore();
+            
             env.gr_context.flush_and_submit();
             env.gl_surface.swap_buffers(&env.gl_context).unwrap();
+            app.set_need_redraw(false);
         }
 
         *control_flow = if needs_redraw {
@@ -101,7 +144,26 @@ fn run(app:SharedApp, mut env:Env, event_loop:EventLoop<()>){
     });
 }
 
-pub fn create_window(window_builder: WindowBuilder) {
+fn dispatch_on_click(item: &Item, x: f32, y: f32) {
+    if let Some(on_click) = item.get_on_click() {
+        let layout_params = item.get_layout_params();
+        if x >= layout_params.x
+            && x <= layout_params.x + layout_params.width
+            && y >= layout_params.y
+            && y <= layout_params.y + layout_params.height
+        {
+            on_click();
+        }
+    }
+
+    if let Some(item_group) = item.as_item_group() {
+        for child in item_group.get_children() {
+            dispatch_on_click(child, x, y);
+        }
+    }
+}
+
+pub fn create_window(window_builder: WindowBuilder,launch_page:Box<dyn Page>) {
 
 
     let event_loop = EventLoop::new();
@@ -214,7 +276,10 @@ pub fn create_window(window_builder: WindowBuilder) {
     };
 
     let app = SharedApp::new(window);
-    run(app, env, event_loop);
+    new_app(app.clone());
+    let mut pages =PageStack::new();
+    pages.launch(launch_page,app.clone());
+    run(app,pages, env, event_loop);
 }
 
 fn create_surface(
