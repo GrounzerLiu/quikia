@@ -1,25 +1,28 @@
 use std::ops::{Deref, DerefMut};
 use skia_safe::Canvas;
-use crate::item::{Rectangle, Row};
+use crate::item::{Rectangle, Row, Stack};
 use crate::property::{BoolProperty, SizeProperty};
 
 pub enum Item{
     Rectangle(Rectangle),
     Row(Row),
+    Stack(Stack),
 }
 
 impl Item{
     pub fn as_item_group(&self) -> Option<&dyn ItemGroup>{
         match self{
             Item::Rectangle(_) => None,
-            Item::Row(r) => Some(r),
+            Item::Row(row) => Some(row),
+            Item::Stack(stack) => Some(stack),
         }
     }
 
     pub fn as_item_group_mut(&mut self) -> Option<&mut dyn ItemGroup>{
         match self{
             Item::Rectangle(_) => None,
-            Item::Row(r) => Some(r),
+            Item::Row(row) => Some(row),
+            Item::Stack(stack) => Some(stack),
         }
     }
 }
@@ -28,8 +31,9 @@ impl Deref for Item{
     type Target = dyn ItemTrait;
     fn deref(&self) -> &Self::Target{
         match self{
-            Item::Rectangle(r) => r,
-            Item::Row(r) => r,
+            Item::Rectangle(rectangle) => rectangle,
+            Item::Row(row) => row,
+            Item::Stack(stack) => stack,
         }
     }
 }
@@ -37,8 +41,9 @@ impl Deref for Item{
 impl DerefMut for Item{
     fn deref_mut(&mut self) -> &mut Self::Target{
         match self{
-            Item::Rectangle(r) => r,
-            Item::Row(r) => r,
+            Item::Rectangle(rectangle) => rectangle,
+            Item::Row(row) => row,
+            Item::Stack(stack) => stack,
         }
     }
 }

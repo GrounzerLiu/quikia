@@ -1,22 +1,35 @@
-//TODO: implement stack
-/*use skia_safe::Rect;
-use skia_safe::svg::Canvas;
+use skia_safe::Rect;
+use skia_safe::Canvas;
 use macros::item;
 use crate::item::{Alignment, Drawable, Item, ItemGroup, Layout, MeasureMode};
 use crate::item_init;
-use crate::property::Size;
+use crate::property::{AlignmentProperty, SharedProperty, Size};
 
 #[item]
 pub struct Stack {
     children: Vec<Item>,
+    content_align: AlignmentProperty,
 }
 
 
-item_init! (
+item_init!(
     Stack{
-        children: Vec::new()
+        children: Vec::new(),
+        content_align: Alignment::TopStart.into()
     }
 );
+
+impl Stack{
+    pub fn content_align(mut self, content_align: impl Into<AlignmentProperty>) -> Self{
+        self.content_align = content_align.into();
+        let app = self.app.clone();
+        self.content_align.lock().add_value_changed_listener(
+            crate::property::ValueChangedListener::new_without_id(move ||{
+            app.need_redraw();
+        }));
+        self
+    }
+}
 
 
 impl ItemGroup for Stack {
@@ -51,19 +64,24 @@ impl Stack {
 impl Drawable for Stack {
     fn draw(&self, canvas: &Canvas) {
         canvas.save();
-        canvas.clip_rect(Rect::new(self.measure_x, self.measure_y, self.measure_x + self.measure_width, self.measure_y + self.measure_height), None, None);
+
+        let layout_params = &self.layout_params;
+        canvas.clip_rect(Rect::from_xywh(layout_params.x, layout_params.y, layout_params.width, layout_params.height), None, Some(false));
+
         if let Some(background) = self.background.get() {
-            let mut background = background.lock().unwrap();
-            background.layout(self.measure_x, self.measure_y, self.measure_width, self.measure_height);
+            let background = background.lock().unwrap();
             background.draw(canvas);
         }
+
         self.children.iter().for_each(|child| {
-            // if !(child.measure_x() + child.measure_width() < self.measure_x || child.measure_y() + child.measure_height() < self.measure_y
-            //     || child.measure_x() > self.measure_x + self.measure_width || child.measure_y() > self.measure_y + self.measure_height) {
-            //     child.draw(canvas);
-            // }
             child.draw(canvas);
         });
+
+        if let Some(foreground) = self.foreground.get() {
+            let foreground = foreground.lock().unwrap();
+            foreground.draw(canvas);
+        }
+
         canvas.restore();
     }
 }
@@ -111,41 +129,44 @@ impl Layout for Stack {
     fn measure(&mut self, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) {
         self.measure_children(width_measure_mode, height_measure_mode);
 
+        let mut layout_params = &mut self.layout_params;
         match width_measure_mode {
             MeasureMode::Exactly(width) => {
-                self.measure_width = width
+                layout_params.width = width
             }
             MeasureMode::AtMost(width) => {
-                self.measure_width = self.children.iter().fold(0.0, |acc, child| {
-                    acc.max(child.measure_width())
+                layout_params.width = self.children.iter().fold(0.0, |acc, child| {
+                    acc.max(child.get_layout_params().width)
                 });
-                if self.measure_width > width {
-                    self.measure_width = width;
+                if layout_params.width > width {
+                    layout_params.width = width;
                 }
             }
         }
         match height_measure_mode {
-            MeasureMode::Exactly(height) => self.measure_height = height,
+            MeasureMode::Exactly(height) => layout_params.height = height,
             MeasureMode::AtMost(height) => {
-                self.measure_height = self.children.iter().fold(0.0, |acc, child| {
-                    acc.max(child.measure_height())
+                layout_params.height = self.children.iter().fold(0.0, |acc, child| {
+                    acc.max(child.get_layout_params().height)
                 });
-                if self.measure_height > height {
-                    self.measure_height = height;
+                if layout_params.height > height {
+                    layout_params.height = height;
                 }
             }
         }
     }
 
     fn layout(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        self.measure_x = x;
-        self.measure_y = y;
-        self.measure_width = width;
-        self.measure_height = height;
+        let mut layout_params = &mut self.layout_params;
+
+        layout_params.x = x;
+        layout_params.y = y;
+        layout_params.width = width;
+        layout_params.height = height;
 
         for child in self.children.iter_mut() {
-            let child_width = child.measure_width();
-            let child_height = child.measure_height();
+            let child_width = child.get_layout_params().width;
+            let child_height = child.get_layout_params().height;
             match self.content_align.get() {
                 Alignment::TopStart => {
                     child.layout(x, y, child_width, child_height);
@@ -205,4 +226,4 @@ macro_rules! stack_generate {
             $crate::display::Stack::new().children(children)
         }
     };
-}*/
+}

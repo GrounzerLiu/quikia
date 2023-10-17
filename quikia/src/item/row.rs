@@ -50,13 +50,14 @@ impl Drawable for Row {
     fn draw(&self, canvas: &Canvas) {
         canvas.save();
 
+        let layout_params = &self.layout_params;
+        canvas.clip_rect(Rect::from_xywh(layout_params.x, layout_params.y, layout_params.width, layout_params.height), None, Some(false));
+
         if let Some(background) = self.background.get(){
             let background=background.lock().unwrap();
             background.draw(canvas);
         }
 
-        let layout_params = &self.layout_params;
-        canvas.clip_rect(Rect::from_xywh(layout_params.x, layout_params.y, layout_params.width, layout_params.height), None, Some(false));
         self.children.iter().for_each(|child| {
             child.draw(canvas);
         });
@@ -65,6 +66,7 @@ impl Drawable for Row {
             let foreground=foreground.lock().unwrap();
             foreground.draw(canvas);
         }
+
         canvas.restore();
     }
 }

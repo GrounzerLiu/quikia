@@ -3,12 +3,14 @@ mod size_property;
 mod color_property;
 mod bool_property;
 mod item_property;
+mod alignment_property;
 
 pub use float_property::*;
 pub use size_property::*;
 pub use color_property::*;
 pub use bool_property::*;
 pub use item_property::*;
+pub use alignment_property::*;
 
 use std::sync::{Arc, Mutex};
 
