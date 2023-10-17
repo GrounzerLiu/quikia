@@ -25,8 +25,15 @@ pub(crate) fn new_app(app: SharedApp){
     apps.push_back((std::thread::current().id(), app));
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum LayoutDirection {
+    LeftToRight,
+    RightToLeft,
+}
+
 pub struct App {
     window: Window,
+    layout_direction: LayoutDirection,
     need_redraw: bool,
     pub(crate) named_ids:HashMap<String,usize>,
     pub(crate) unnamed_id:usize,
@@ -36,6 +43,7 @@ impl App {
     pub fn new(window: Window) -> Self {
         Self {
             window,
+            layout_direction: LayoutDirection::LeftToRight,
             need_redraw: false,
             named_ids: HashMap::new(),
             unnamed_id: 0,
@@ -87,6 +95,10 @@ impl App {
 
     pub fn scale_factor(&self) -> f32 {
         self.window.scale_factor() as f32
+    }
+
+    pub fn layout_direction(&self) -> LayoutDirection {
+        self.layout_direction
     }
 }
 
@@ -152,5 +164,9 @@ impl SharedApp {
 
     pub fn scale_factor(&self) -> f32 {
         self.app.lock().unwrap().scale_factor()
+    }
+
+    pub fn layout_direction(&self) -> LayoutDirection {
+        self.app.lock().unwrap().layout_direction()
     }
 }
