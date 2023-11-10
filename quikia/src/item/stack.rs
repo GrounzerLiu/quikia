@@ -1,9 +1,9 @@
-use skia_safe::Rect;
+/*use skia_safe::Rect;
 use skia_safe::Canvas;
 use macros::item;
-use crate::item::{Alignment, Drawable, Item, ItemGroup, Layout, MeasureMode};
+use crate::item::{Alignment, Drawable, EventInput, Item, ItemGroup, ItemTrait, Layout, MeasureMode};
 use crate::item_init;
-use crate::property::{AlignmentProperty, SharedProperty, Size};
+use crate::property::{AlignmentProperty, Gettable, Size};
 
 #[item]
 pub struct Stack {
@@ -23,9 +23,9 @@ impl Stack{
     pub fn content_align(mut self, content_align: impl Into<AlignmentProperty>) -> Self{
         self.content_align = content_align.into();
         let app = self.app.clone();
-        self.content_align.lock().add_value_changed_listener(
-            crate::property::ValueChangedListener::new_without_id(move ||{
-            app.need_redraw();
+        self.content_align.lock().add_observer(
+            crate::property::Observer::new_without_id(move ||{
+            app.request_redraw();
         }));
         self
     }
@@ -68,8 +68,8 @@ impl Drawable for Stack {
         let layout_params = &self.layout_params;
         canvas.clip_rect(Rect::from_xywh(layout_params.x, layout_params.y, layout_params.width, layout_params.height), None, Some(false));
 
-        if let Some(background) = self.background.get() {
-            let background = background.lock().unwrap();
+        if let Some(background) = self.background.lock().as_mut() {
+            //let background = background.lock().unwrap();
             background.draw(canvas);
         }
 
@@ -77,8 +77,8 @@ impl Drawable for Stack {
             child.draw(canvas);
         });
 
-        if let Some(foreground) = self.foreground.get() {
-            let foreground = foreground.lock().unwrap();
+        if let Some(foreground) = self.foreground.lock().as_mut() {
+            //let foreground = foreground.lock().unwrap();
             foreground.draw(canvas);
         }
 
@@ -167,7 +167,7 @@ impl Layout for Stack {
         for child in self.children.iter_mut() {
             let child_width = child.get_layout_params().width;
             let child_height = child.get_layout_params().height;
-            match self.content_align.get() {
+            match self.content_align.get(){
                 Alignment::TopStart => {
                     child.layout(x, y, child_width, child_height);
                 }
@@ -200,6 +200,12 @@ impl Layout for Stack {
     }
 }
 
+impl EventInput for Stack{
+    fn on_pointer_input(&mut self, _action: crate::item::PointerAction) -> bool {
+        false
+    }
+}
+
 impl From<Stack> for Item {
     fn from(flow: Stack) -> Self {
         Item::Stack(flow)
@@ -210,7 +216,7 @@ impl From<Stack> for Item {
 #[macro_export]
 macro_rules! stack {
     ($($child:expr)*) => {
-        $crate::display::Stack::new().children(vec![$($child.into()),*])
+        $crate::item::Stack::new().children(vec![$($child.into()),*])
     }
 }
 
@@ -226,4 +232,4 @@ macro_rules! stack_generate {
             $crate::display::Stack::new().children(children)
         }
     };
-}
+}*/

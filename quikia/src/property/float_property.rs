@@ -1,102 +1,61 @@
 use crate::property::SharedProperty;
+use crate::property::Gettable;
 
 pub type FloatProperty = SharedProperty<f32>;
 
 impl FloatProperty{
-    pub fn from_f32(value: f32) -> Self{
-        Self::from_generator(Box::new(move || value))
+    pub fn from_f32(value: f32) -> Self {
+        Self::from_value(value)
     }
 
-    pub fn from_f64(value: f64) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_f64(value: f64) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_u32(value: u32) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_u32(value: u32) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_u64(value: u64) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_u64(value: u64) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_u16(value: u16) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_u16(value: u16) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_u8(value: u8) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_u8(value: u8) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_usize(value: usize) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_usize(value: usize) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_i32(value: i32) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_i32(value: i32) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_i64(value: i64) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_i64(value: i64) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_i16(value: i16) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_i16(value: i16) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_i8(value: i8) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_i8(value: i8) -> Self {
+        Self::from_value(value as f32)
     }
 
-    pub fn from_isize(value: isize) -> Self{
-        Self::from_generator(Box::new(move || value as f32))
+    pub fn from_isize(value: isize) -> Self {
+        Self::from_value(value as f32)
     }
 }
 
 impl From<&FloatProperty> for FloatProperty{
     fn from(value: &FloatProperty) -> Self {
         value.clone()
-    }
-}
-
-impl From<f32> for FloatProperty{
-    fn from(value: f32) -> Self {
-        Self::from_f32(value)
-    }
-}
-
-impl From<f64> for FloatProperty{
-    fn from(value: f64) -> Self {
-        Self::from_f64(value)
-    }
-}
-
-impl From<u32> for FloatProperty{
-    fn from(value: u32) -> Self {
-        Self::from_u32(value)
-    }
-}
-
-impl From<u64> for FloatProperty{
-    fn from(value: u64) -> Self {
-        Self::from_u64(value)
-    }
-}
-
-impl From<u16> for FloatProperty{
-    fn from(value: u16) -> Self {
-        Self::from_u16(value)
-    }
-}
-
-impl From<u8> for FloatProperty{
-    fn from(value: u8) -> Self {
-        Self::from_u8(value)
-    }
-}
-
-impl From<usize> for FloatProperty{
-    fn from(value: usize) -> Self {
-        Self::from_usize(value)
     }
 }
 
@@ -111,25 +70,6 @@ impl From<i64> for FloatProperty{
         Self::from_i64(value)
     }
 }
-
-impl From<i16> for FloatProperty{
-    fn from(value: i16) -> Self {
-        Self::from_i16(value)
-    }
-}
-
-impl From<i8> for FloatProperty{
-    fn from(value: i8) -> Self {
-        Self::from_i8(value)
-    }
-}
-
-impl From<isize> for FloatProperty{
-    fn from(value: isize) -> Self {
-        Self::from_isize(value)
-    }
-}
-
 
 macro_rules! p_op_p {
     ($op:ident, $op_fn:ident) => {

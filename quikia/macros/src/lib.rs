@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2::Ident;
 use quote::quote;
 use syn::{parse_macro_input, parse_quote, Fields, ItemStruct};
 
@@ -16,15 +17,31 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
 
     let struct_item: ItemStruct = parse_quote!(
         pub struct T {
-            id: usize,
-            app: crate::app::SharedApp,
-            enabled: crate::property::BoolProperty,
-            width: crate::property::SizeProperty,
-            height: crate::property::SizeProperty,
-            background: crate::property::ItemProperty,
-            foreground: crate::property::ItemProperty,
-            layout_params: crate::item::LayoutParams,
-            on_click: Option<Box<dyn Fn()>>,
+            pub(crate) id: usize,
+            pub(crate) path: crate::item::ItemPath,
+            pub(crate) app: crate::app::SharedApp,
+            pub(crate) children: std::vec::Vec<crate::item::Item>,
+            pub(crate) active: crate::property::BoolProperty,
+            pub(crate) focusable: crate::property::BoolProperty,
+            pub(crate) focused: crate::property::BoolProperty,
+            pub(crate) focusable_when_clicked: crate::property::BoolProperty,
+            pub(crate) width: crate::property::SizeProperty,
+            pub(crate) height: crate::property::SizeProperty,
+            pub(crate) padding_left: crate::property::FloatProperty,
+            pub(crate) padding_top: crate::property::FloatProperty,
+            pub(crate) padding_right: crate::property::FloatProperty,
+            pub(crate) padding_bottom: crate::property::FloatProperty,
+            pub(crate) margin_left: crate::property::FloatProperty,
+            pub(crate) margin_top: crate::property::FloatProperty,
+            pub(crate) margin_right: crate::property::FloatProperty,
+            pub(crate) margin_bottom: crate::property::FloatProperty,
+            pub(crate) background: crate::property::ItemProperty,
+            pub(crate) foreground: crate::property::ItemProperty,
+            pub(crate) layout_params: crate::item::LayoutParams,
+            pub(crate) on_click: Option<Box<dyn Fn()>>,
+            pub(crate) on_pointer_input: Option<Box<dyn Fn(crate::item::PointerAction)>>,
+            pub(crate) on_focus: Option<Box<dyn Fn()>>,
+            pub(crate) on_blur: Option<Box<dyn Fn()>>,
         }
     );
 
@@ -32,9 +49,51 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
         fields.push(field.clone());
     });
 
+    fn bind_property(item_name:&Ident,name:&str, property_type:&str)->proc_macro2::TokenStream{
+        let item_name = item_name.clone();
+        let name = Ident::new(name, proc_macro2::Span::mixed_site());
+        let property_type = Ident::new(property_type, proc_macro2::Span::mixed_site());
+        quote!(
+            impl #item_name{
+                pub fn #name(mut self, value: impl Into<crate::property::#property_type>) -> Self{
+                    self.#name = value.into();
+                    let app = self.app.clone();
+                    self.#name.lock().add_observer(
+                        crate::property::Observer::new_without_id(move ||{
+                        app.request_redraw();
+                    }));
+                    self
+                }
+            }
+        )
+    }
+
+    let property_bindings:Vec<proc_macro2::TokenStream> =vec!(
+        bind_property(&name,"active","BoolProperty"),
+        bind_property(&name,"focusable","BoolProperty"),
+        bind_property(&name,"focused","BoolProperty"),
+        bind_property(&name,"focusable_when_clicked","BoolProperty"),
+        bind_property(&name,"width","SizeProperty"),
+        bind_property(&name,"height","SizeProperty"),
+        bind_property(&name,"padding_left","FloatProperty"),
+        bind_property(&name,"padding_top","FloatProperty"),
+        bind_property(&name,"padding_right","FloatProperty"),
+        bind_property(&name,"padding_bottom","FloatProperty"),
+        bind_property(&name,"margin_left","FloatProperty"),
+        bind_property(&name,"margin_top","FloatProperty"),
+        bind_property(&name,"margin_right","FloatProperty"),
+        bind_property(&name,"margin_bottom","FloatProperty"),
+        bind_property(&name,"background","ItemProperty"),
+        bind_property(&name,"foreground","ItemProperty"),
+    );
+
 
     quote!(
         #ast
+
+        #(
+            #property_bindings
+        )*
 
         impl #name{
 
@@ -43,58 +102,32 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
                 self
             }
 
-            pub fn enabled(mut self, enabled: impl core::convert::Into<crate::property::BoolProperty>)->Self{
-                self.enabled = enabled.into();
-                let app=self.app.clone();
-                self.enabled.lock().add_value_changed_listener(
-                    crate::property::ValueChangedListener::new_without_id(move ||{
-                    app.need_redraw();
-                }));
+
+            pub fn children(mut self, children: std::collections::LinkedList<crate::item::Item>) -> Self{
+                for mut child in children{
+                    let mut path=self.path.clone();
+                    path.push(self.children.len());
+                    child.set_path(path);
+                    self.children.push(child);
+                }
                 self
             }
 
-            pub fn width(mut self, width: impl core::convert::Into<crate::property::SizeProperty>)->Self{
-                self.width = width.into();
-                let app=self.app.clone();
-                self.width.lock().add_value_changed_listener(
-                    crate::property::ValueChangedListener::new_without_id(move ||{
-                    app.need_redraw();
-                }));
-                self
-            }
-
-            pub fn height(mut self, height: impl core::convert::Into<crate::property::SizeProperty>)->Self{
-                self.height = height.into();
-                let app=self.app.clone();
-                self.height.lock().add_value_changed_listener(
-                    crate::property::ValueChangedListener::new_without_id(move ||{
-                    app.need_redraw();
-                }));
-                self
-            }
-
-            pub fn background(mut self, background: impl core::convert::Into<crate::property::ItemProperty>)->Self{
-                self.background = background.into();
-                let app=self.app.clone();
-                self.background.lock().add_value_changed_listener(
-                    crate::property::ValueChangedListener::new_without_id(move ||{
-                    app.need_redraw();
-                }));
-                self
-            }
-
-            pub fn foreground(mut self, foreground: impl core::convert::Into<crate::property::ItemProperty>)->Self{
-                self.foreground = foreground.into();
-                let app=self.app.clone();
-                self.foreground.lock().add_value_changed_listener(
-                    crate::property::ValueChangedListener::new_without_id(move ||{
-                    app.need_redraw();
-                }));
+            pub fn add_child(mut self, mut child: crate::item::Item) -> Self{
+                let mut path=self.path.clone();
+                path.push(self.children.len());
+                child.set_path(path);
+                self.children.push(child);
                 self
             }
 
             pub fn on_click(mut self, on_click: impl Fn() + 'static)->Self{
                 self.on_click = Some(Box::new(on_click));
+                self
+            }
+
+            pub fn on_pointer_input(mut self, on_pointer_input: impl Fn(crate::item::PointerAction) + 'static)->Self{
+                self.on_pointer_input = Some(Box::new(on_pointer_input));
                 self
             }
         }
@@ -104,8 +137,40 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
                 self.id
             }
 
-            fn get_enabled(&self)->crate::property::BoolProperty{
-                self.enabled.clone()
+            fn get_path(&self) -> &crate::item::ItemPath{
+                &self.path
+            }
+
+            fn set_path(&mut self, path: crate::item::ItemPath){
+                self.path=path;
+            }
+
+            fn get_children(&self)->&std::vec::Vec<crate::item::Item>{
+                &self.children
+            }
+
+            fn get_children_mut(&mut self)->&mut std::vec::Vec<crate::item::Item>{
+                &mut self.children
+            }
+
+            fn request_focus(&self){
+                self.app.request_focus(&self.path);
+            }
+
+            fn get_active(&self)->crate::property::BoolProperty{
+                self.active.clone()
+            }
+
+            fn get_focusable(&self)->crate::property::BoolProperty{
+                self.focusable.clone()
+            }
+
+            fn get_focused(&self)->crate::property::BoolProperty{
+                self.focused.clone()
+            }
+
+            fn get_focusable_when_clicked(&self)->crate::property::BoolProperty{
+                self.focusable_when_clicked.clone()
             }
             
             fn get_width(&self) -> crate::property::SizeProperty{
@@ -116,12 +181,56 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
                 self.height.clone()
             }
 
+            fn get_padding_left(&self) -> crate::property::FloatProperty{
+                self.padding_left.clone()
+            }
+
+            fn get_padding_top(&self) -> crate::property::FloatProperty{
+                self.padding_top.clone()
+            }
+
+            fn get_padding_right(&self) -> crate::property::FloatProperty{
+                self.padding_right.clone()
+            }
+
+            fn get_padding_bottom(&self) -> crate::property::FloatProperty{
+                self.padding_bottom.clone()
+            }
+
+            fn get_margin_left(&self) -> crate::property::FloatProperty{
+                self.margin_left.clone()
+            }
+
+            fn get_margin_top(&self) -> crate::property::FloatProperty{
+                self.margin_top.clone()
+            }
+
+            fn get_margin_right(&self) -> crate::property::FloatProperty{
+                self.margin_right.clone()
+            }
+
+            fn get_margin_bottom(&self) -> crate::property::FloatProperty{
+                self.margin_bottom.clone()
+            }
+
             fn get_layout_params(&self) -> &crate::item::LayoutParams{
                 &self.layout_params
             }
 
             fn get_on_click(&self) -> Option<&Box<dyn Fn() + 'static>>{
                 self.on_click.as_ref()
+            }
+
+            fn get_on_pointer_input(&self) -> Option<&Box<dyn Fn(crate::item::PointerAction) + 'static>>{
+                self.on_pointer_input.as_ref()
+            }
+
+            fn get_on_focus(&self) -> Option<&Box<dyn Fn() + 'static>>{
+                self.on_focus.as_ref()
+            }
+
+            fn get_on_blur(&self) -> Option<&Box<dyn Fn() + 'static>>{
+                self.on_blur.as_ref()
             }
         }
 

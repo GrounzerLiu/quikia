@@ -1,69 +1,36 @@
 use skia_safe::{Canvas, Rect};
+use winit::event::{DeviceId, MouseButton};
 use macros::item;
-use crate::item::{Drawable, Item, ItemGroup, Layout, MeasureMode};
+use crate::item::{ButtonState, Drawable, EventInput, ForEachActiveMut, Item, ItemTrait, Layout, MeasureMode, PointerAction, PointerType};
 use crate::item_init;
-use crate::property::Size;
+use crate::property::{Gettable, Size};
 
 #[item]
 pub struct Row {
-    children: Vec<Item>,
 }
 
 
 item_init! {
     Row{
-        children: Vec::new()
-    }
-}
-
-
-impl ItemGroup for Row {
-    fn get_children(&self) -> &Vec<Item> {
-        &self.children
-    }
-
-    fn get_children_mut(&mut self) -> &mut Vec<Item> {
-        &mut self.children
-    }
-
-    fn add_child(&mut self, child: Item) {
-        self.children.push(child);
-    }
-
-    fn remove_child_at(&mut self, index: usize) {
-        self.children.remove(index);
-    }
-
-    fn clear_children(&mut self) {
-        self.children.clear();
-    }
-}
-
-impl Row {
-    pub fn children(mut self, children: Vec<Item>) -> Self {
-        self.children = children;
-        self
     }
 }
 
 impl Drawable for Row {
-    fn draw(&self, canvas: &Canvas) {
+    fn draw(&mut self, canvas: &Canvas) {
         canvas.save();
 
         let layout_params = &self.layout_params;
         canvas.clip_rect(Rect::from_xywh(layout_params.x, layout_params.y, layout_params.width, layout_params.height), None, Some(false));
 
-        if let Some(background) = self.background.get(){
-            let background=background.lock().unwrap();
+        if let Some(background) = self.background.lock().as_mut() {
             background.draw(canvas);
         }
 
-        self.children.iter().for_each(|child| {
+        self.children.iter_mut().for_each_active(|child| {
             child.draw(canvas);
         });
 
-        if let Some(foreground) = self.foreground.get(){
-            let foreground=foreground.lock().unwrap();
+        if let Some(foreground) = self.foreground.lock().as_mut() {
             foreground.draw(canvas);
         }
 
@@ -82,7 +49,7 @@ fn measure_child(child: &Item, width_measure_mode: MeasureMode, height_measure_m
     };
 
     let child_width = child.get_width().get();
-    let child_height = child.get_height().get();
+    let child_height = child.get_height().get().clone();
 
     let child_width_measure_mode = match child_width {
         Size::Default => MeasureMode::AtMost(max_width),
@@ -101,92 +68,71 @@ fn measure_child(child: &Item, width_measure_mode: MeasureMode, height_measure_m
     (child_width_measure_mode, child_height_measure_mode)
 }
 
-impl Row {
-    fn measure_children(&mut self, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) {
-        self.children.iter_mut().for_each(|child| {
-            if child.get_enabled().get(){
-                let (child_width_measure_mode, child_height_measure_mode) = measure_child(child, width_measure_mode, height_measure_mode);
-                child.measure(child_width_measure_mode, child_height_measure_mode);
-            }
-            else {
-                child.measure(MeasureMode::Exactly(0.0), MeasureMode::Exactly(0.0));
-            }
-        });
-    }
-}
-
 impl Layout for Row {
-    fn measure(&mut self, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) {
-        self.measure_children(width_measure_mode, height_measure_mode);
-        let mut layout_params = &mut self.layout_params;
-        match width_measure_mode {
-            MeasureMode::Exactly(width) => layout_params.width = width,
-            MeasureMode::AtMost(width) => {
-                match self.width.get() {
-                    Size::Default => {
-                        layout_params.width = self.children.iter().fold(0.0, |acc, child| {
-                            acc + child.get_layout_params().width
-                        });
-                    }
-                    Size::Fill => {
-                        layout_params.width = width;
-                    }
-                    Size::Fixed(width) => {
-                        layout_params.width = width;
-                    }
-                    Size::Relative(scale) => {
-                        layout_params.width = width * scale;
-                    }
-                }
-            }
-        }
-        match height_measure_mode {
-            MeasureMode::Exactly(height) => layout_params.height = height,
-            MeasureMode::AtMost(height) => {
-                match self.height.get() {
-                    Size::Default => {
-                        layout_params.height = self.children.iter().fold(0.0, |acc, child| acc.max(child.get_layout_params().height));
-                    }
-                    Size::Fill => {
-                        layout_params.height = height;
-                    }
-                    Size::Fixed(height) => {
-                        layout_params.height = height;
-                    }
-                    Size::Relative(scale) => {
-                        layout_params.height = height * scale;
-                    }
-                }
-            }
-        }
-    }
-
-    fn layout(&mut self, x: f32, y: f32, width: f32, height: f32) {
+    fn measure(&mut self, x: f32, y: f32, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) {
         let mut layout_params = &mut self.layout_params;
         layout_params.x = x;
         layout_params.y = y;
-        layout_params.width = width;
-        layout_params.height = height;
 
-        let mut current_x = x;
-        self.children.iter_mut().for_each(|child| {
-            let child_width = child.get_layout_params().width;
-            let child_height = child.get_layout_params().height;
-            child.layout(current_x, y, child_width, child_height);
-            current_x += child_width;
+        let mut width = 0.0;
+        let mut height = 0.0_f32;
+        let mut child_x = x;
+
+        let mut remaining_width = match width_measure_mode {
+            MeasureMode::Exactly(width) => width,
+            MeasureMode::AtMost(width) => width,
+        };
+
+        self.children.iter_mut().for_each_active(|child| {
+
+            let width_measure_mode=match width_measure_mode {
+                MeasureMode::Exactly(_) => MeasureMode::Exactly(remaining_width),
+                MeasureMode::AtMost(_) => MeasureMode::AtMost(remaining_width),
+            };
+
+            child_x+=child.get_margin_left().get();
+
+            let (child_width_measure_mode, child_height_measure_mode) = measure_child(child, width_measure_mode, height_measure_mode);
+            child.measure(child_x, y, child_width_measure_mode, child_height_measure_mode);
+
+            let child_layout_params = child.get_layout_params();
+            let child_occupied_width = child_layout_params.width + child_layout_params.margin_left + child_layout_params.margin_right;
+
+            child_x += child_layout_params.width+ child_layout_params.margin_right;
+
+            width += child_occupied_width;
+            height = height.max(child_layout_params.height+child_layout_params.margin_top+child_layout_params.margin_bottom);
+            if remaining_width-child_occupied_width<0.0{
+                remaining_width=0.0;
+            }else{
+                remaining_width -= child_occupied_width;
+            }
         });
 
-        if let Some(background) = self.background.get(){
-            let mut background=background.lock().unwrap();
-            background.measure(MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
-            background.layout(layout_params.x, layout_params.y, layout_params.width, layout_params.height);
+        match width_measure_mode {
+            MeasureMode::Exactly(measured_width) => {
+                layout_params.width = measured_width;
+            }
+            MeasureMode::AtMost(measured_width) => {
+                layout_params.width = measured_width.min(width);
+            }
         }
 
+        match height_measure_mode {
+            MeasureMode::Exactly(measured_height) => {
+                layout_params.height = measured_height;
+            }
+            MeasureMode::AtMost(measured_height) => {
+                layout_params.height = measured_height.min(height);
+            }
+        }
 
-        if let Some(foreground) = self.foreground.get(){
-            let mut foreground=foreground.lock().unwrap();
-            foreground.measure(MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
-            foreground.layout(layout_params.x, layout_params.y, layout_params.width, layout_params.height);
+        if let Some(background) = self.background.lock().as_mut() {
+            background.measure( x, y, MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
+        }
+
+        if let Some(foreground) = self.foreground.lock().as_mut() {
+            foreground.measure( x, y, MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
         }
     }
 }
@@ -196,15 +142,41 @@ impl Layout for Row {
 macro_rules! row {
     ($($child:expr)*) => {
         Row::new().children({
-            let children:Vec<Item> = vec![$($child.into()),*];
-            let mut ids=std::collections::HashSet::new();
-            children.iter().for_each(|child|{
-                if !ids.insert(child.get_id()){
-                    panic!("The same id cannot be reused in a item group");
-                }
-            });
+            let mut children:std::collections::LinkedList<$crate::item::Item>=std::collections::LinkedList::new();
+            $(
+                children.push_back($child.into());
+            )*
             children
         })
+    }
+}
+
+impl EventInput for Row {
+    fn on_pointer_input(&mut self, action: PointerAction) -> bool {
+        if let Some(on_click)=self.get_on_click(){
+            if let PointerAction::Up {..}=action{
+                on_click();
+                return true;
+            }
+            return true;
+        }
+        false
+    }
+    fn on_mouse_input(&mut self, device_id: DeviceId, state: ButtonState, button: MouseButton, cursor_x: f32, cursor_y: f32) -> bool {
+        for child in self.children.iter_mut().rev() {
+            let child_layout_params = child.get_layout_params();
+            if child_layout_params.contains(cursor_x, cursor_y){
+                if child.on_mouse_input(device_id, state, button, cursor_x, cursor_y) {
+                    return true;
+                }
+            }
+
+        }
+        if self.on_pointer_input(PointerAction::from_mouse(state,button,cursor_x,cursor_y)){
+            self.app.catch_pointer(PointerType::Cursor { mouse_button: button }, &self.path);
+            return true;
+        }
+        false
     }
 }
 

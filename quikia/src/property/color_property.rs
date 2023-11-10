@@ -1,21 +1,8 @@
 use skia_safe::{Color, Color4f};
 
-use super::SharedProperty;
+use super::{Gettable, SharedProperty};
 
 pub type ColorProperty = SharedProperty<Color>;
-
-impl From<Color> for ColorProperty {
-    fn from(color: Color) -> Self {
-        Self::from_generator(Box::new(move || color))
-    }
-}
-
-impl From<&Color> for ColorProperty {
-    fn from(color: &Color) -> Self {
-        let color = *color;
-        Self::from_generator(Box::new(move || color))
-    }
-}
 
 impl From<&ColorProperty> for ColorProperty {
     fn from(color: &ColorProperty) -> Self {

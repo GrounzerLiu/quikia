@@ -1,4 +1,4 @@
-use crate::property::SharedProperty;
+use crate::property::{Gettable, SharedProperty};
 
 #[derive(Debug)]
 pub enum Size{
@@ -110,12 +110,6 @@ impl Into<Size> for &Size{
 
 pub type SizeProperty = SharedProperty<Size>;
 
-impl From<Size> for SizeProperty {
-    fn from(size: Size) -> Self {
-        SizeProperty::from_value(size)
-    }
-}
-
 impl From<u32> for SizeProperty {
     fn from(size: u32) -> Self {
         SizeProperty::from_value(Size::Fixed(size as f32))
@@ -159,12 +153,6 @@ impl From<&SizeProperty> for SizeProperty {
     }
 }
 
-impl From<&Size> for SizeProperty {
-    fn from(size: &Size) -> Self {
-        SizeProperty::from_value(size.clone())
-    }
-}
-
 impl std::ops::Add<&SizeProperty> for &SizeProperty {
     type Output = SizeProperty;
 
@@ -187,8 +175,8 @@ impl std::ops::Add<&SizeProperty> for &SizeProperty {
             }
         }
         ));
-        output.lock().observe(self);
-        output.lock().observe(rhs);
+        output.observe(self);
+        output.observe(rhs);
         output
     }
 }

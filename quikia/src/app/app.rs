@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use winit::window::Window;
 use std::thread::ThreadId;
+use crate::item::{Item, ItemPath, PointerType};
 
 lazy_static!(
     pub(crate) static ref APPS:Mutex<LinkedList<(ThreadId, SharedApp)>> = Mutex::new(LinkedList::new());
@@ -33,8 +34,13 @@ pub enum LayoutDirection {
 
 pub struct App {
     window: Window,
-    layout_direction: LayoutDirection,
     need_redraw: bool,
+    layout_direction: LayoutDirection,
+    pub(crate) focused_item_path: Option<ItemPath>,
+    pub(crate) request_focus_path: Option<ItemPath>,
+
+    pub(crate) pointer_catch:Option<(PointerType,ItemPath)>,
+
     pub(crate) named_ids:HashMap<String,usize>,
     pub(crate) unnamed_id:usize,
 }
@@ -43,8 +49,11 @@ impl App {
     pub fn new(window: Window) -> Self {
         Self {
             window,
-            layout_direction: LayoutDirection::LeftToRight,
             need_redraw: false,
+            layout_direction: LayoutDirection::LeftToRight,
+            focused_item_path: None,
+            request_focus_path: None,
+            pointer_catch: None,
             named_ids: HashMap::new(),
             unnamed_id: 0,
         }
@@ -65,16 +74,31 @@ impl App {
         }
     }
 
-    pub fn need_redraw(&mut self) {
-        self.need_redraw = true;
+    pub fn request_redraw(&mut self) {
+        if !self.need_redraw {
+            self.need_redraw = true;
+            self.window.request_redraw();
+        }
     }
 
-    pub fn whether_need_redraw(&self) -> bool {
-        self.need_redraw
+    pub fn activate_ime(&mut self) {
+        self.window.set_ime_allowed(true);
     }
 
-    pub fn set_need_redraw(&mut self, need_redraw: bool) {
-        self.need_redraw = need_redraw;
+    pub fn deactivate_ime(&mut self) {
+        self.window.set_ime_allowed(false);
+    }
+
+    pub fn redraw_done(&mut self) {
+        self.need_redraw = false;
+    }
+
+    pub fn request_focus(&mut self, path: &ItemPath){
+        self.request_focus_path = Some(path.clone());
+    }
+
+    pub fn catch_pointer(&mut self, pointer_type: PointerType, path: &ItemPath){
+        self.pointer_catch = Some((pointer_type, path.clone()));
     }
 
     pub fn window(&self) -> &Window {
@@ -142,16 +166,28 @@ impl SharedApp {
         self.app.lock().unwrap().id(name)
     }
 
-    pub fn need_redraw(&self) {
-        self.app.lock().unwrap().need_redraw();
+    pub fn request_focus(&self, path: &ItemPath){
+        self.app.lock().unwrap().request_focus(path);
     }
 
-    pub fn whether_need_redraw(&self) -> bool {
-        self.app.lock().unwrap().whether_need_redraw()
+    pub fn catch_pointer(&self, pointer_type: PointerType, path: &ItemPath){
+        self.app.lock().unwrap().catch_pointer(pointer_type, path);
     }
 
-    pub fn set_need_redraw(&self, need_redraw: bool) {
-        self.app.lock().unwrap().set_need_redraw(need_redraw);
+    pub fn request_redraw(&self) {
+        self.app.lock().unwrap().request_redraw();
+    }
+
+    pub fn activate_ime(&self) {
+        self.app.lock().unwrap().activate_ime();
+    }
+
+    pub fn deactivate_ime(&self) {
+        self.app.lock().unwrap().deactivate_ime();
+    }
+
+    pub(crate) fn redraw_done(&self) {
+        self.app.lock().unwrap().redraw_done();
     }
 
     pub fn content_width(&self) -> f32 {

@@ -1,34 +1,36 @@
-
 use std::{
     ffi::CString,
     num::NonZeroU32,
 };
-
+use std::collections::LinkedList;
 use gl::types::*;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
     context::{
-        ContextApi, ContextAttributesBuilder, NotCurrentGlContextSurfaceAccessor,
+        ContextApi, ContextAttributesBuilder,
         PossiblyCurrentContext,
     },
     display::{GetGlDisplay, GlDisplay},
     prelude::GlSurface,
     surface::{Surface as GlutinSurface, SurfaceAttributesBuilder, WindowSurface},
 };
+use glutin::context::NotCurrentGlContext;
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasRawWindowHandle;
 use winit::{
-    event::{Event, KeyboardInput, WindowEvent},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
-use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color,
-                ColorType, Surface, Paint};
-use winit::dpi::LogicalPosition;
-use winit::event::ElementState;
-use crate::app::{new_app, Page, PageStack, SharedApp};
-use crate::item::{Item, MeasureMode};
+use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point};
+use winit::dpi::{LogicalPosition, PhysicalPosition};
+use winit::event::{ElementState, Ime, Touch};
+use winit::keyboard::Key::Named;
+use winit::keyboard::{Key, NamedKey};
+use crate::app::{new_app, Page, PageItem, PageStack, SharedApp};
+use crate::item::{ButtonState, ImeAction, Item, ItemPath, KeyboardInput, MeasureMode, PointerAction, PointerType};
+use crate::property::Gettable;
 
 struct Env {
     surface: Surface,
@@ -40,133 +42,286 @@ struct Env {
     stencil_size: usize,
 }
 
-fn run(app:SharedApp, mut pages:PageStack, mut env:Env, event_loop:EventLoop<()>){
-    let mut cursor_positon=LogicalPosition::new(0.0_f32,0.0_f32);
-    event_loop.run(move |event, _, control_flow| {
-        let mut needs_redraw = false;
+fn run(app: SharedApp, mut pages: PageStack, mut env: Env, event_loop: EventLoop<()>) {
+    let mut cursor_positon = LogicalPosition::new(0.0_f32, 0.0_f32);
+    let mut physical_cursor_positon = PhysicalPosition::new(0.0_f32, 0.0_f32);
+
+    let mut pointer_catch: Vec<(PointerType, ItemPath)> = Vec::new();
+
+    event_loop.run(move |event, elwt| {
         match event {
-            Event::LoopDestroyed => {}
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-                WindowEvent::Resized(physical_size) => {
-                    env.surface = create_surface(
-                        app.lock().unwrap().window(),
-                        env.fb_info,
-                        &mut env.gr_context,
-                        env.num_samples,
-                        env.stencil_size,
-                    );
-                    /* First resize the opengl drawable */
-                    let (width, height): (u32, u32) = physical_size.into();
+            Event::WindowEvent { window_id, event } => {
+                match event {
+                    WindowEvent::CloseRequested => {
+                        elwt.exit();
+                    }
+                    WindowEvent::Resized(physical_size) => {
+                        env.surface = create_surface(
+                            app.lock().unwrap().window(),
+                            env.fb_info,
+                            &mut env.gr_context,
+                            env.num_samples,
+                            env.stencil_size,
+                        );
+                        /* First resize the opengl drawable */
+                        let (width, height): (u32, u32) = physical_size.into();
 
-                    env.gl_surface.resize(
-                        &env.gl_context,
-                        NonZeroU32::new(width.max(1)).unwrap(),
-                        NonZeroU32::new(height.max(1)).unwrap(),
-                    );
+                        env.gl_surface.resize(
+                            &env.gl_context,
+                            NonZeroU32::new(width.max(1)).unwrap(),
+                            NonZeroU32::new(height.max(1)).unwrap(),
+                        );
 
 
-                    let width=width as f32/app.scale_factor();
-                    let height=height as f32/app.scale_factor();
-                    pages.iter_mut().for_each(|(_,item)|{
-                        item.measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
-                        item.layout(0.0, 0.0, width, height);
-                    })
+                        let width = width as f32 / app.scale_factor();
+                        let height = height as f32 / app.scale_factor();
+                        pages.iter_mut().for_each(|PageItem { root_item, .. }| {
+                            root_item.measure(0.0, 0.0, MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                        })
+                    }
+                    WindowEvent::CursorMoved { device_id, position, .. } => {
+                        physical_cursor_positon.x = position.x as f32;
+                        physical_cursor_positon.y = position.y as f32;
+                        let scale_factor = app.scale_factor();
+                        cursor_positon = position.to_logical(scale_factor as f64);
 
-                }
-                WindowEvent::CursorMoved { device_id, position,.. }=>{
-                    let scale_factor=app.scale_factor();
-                    cursor_positon=position.to_logical(scale_factor as f64);
-                }
-                WindowEvent::MouseInput { device_id, state, button, modifiers }=>{
-                    match state {
-                        ElementState::Pressed => {}
-                        ElementState::Released => {
-                            if let Some((_,item))=pages.current_page(){
-                                dispatch_on_click(item, cursor_positon.x, cursor_positon.y);
+                        pointer_catch.iter().for_each(|(pointer_type, path)| {
+                            match pointer_type {
+                                PointerType::Cursor { mouse_button } => {
+                                    if let Some(item) = pages.current_page().unwrap().find_item_mut(path) {
+                                        item.as_event_input().on_mouse_input(
+                                            device_id,
+                                            ButtonState::Moved,
+                                            *mouse_button,
+                                            cursor_positon.x,
+                                            cursor_positon.y,
+                                        );
+                                    }
+                                }
+                                _ => {}
+                            }
+                        });
+                    }
+                    WindowEvent::MouseInput { device_id, state, button } => {
+                        match state {
+                            ElementState::Pressed => {
+                                let PageItem { root_item, .. } = pages.current_page().unwrap();
+                                root_item.as_event_input().on_mouse_input(device_id, state.into(), button, cursor_positon.x, cursor_positon.y);
+                            }
+                            ElementState::Released => {
+                                pointer_catch.iter().for_each(|(pointer_type, path)| {
+                                    match pointer_type {
+                                        PointerType::Cursor { mouse_button } => {
+                                            if *mouse_button == button {
+                                                if let Some(item) = pages.current_page().unwrap().find_item_mut(path) {
+                                                    item.as_event_input().on_mouse_input(
+                                                        device_id,
+                                                        ButtonState::Released,
+                                                        *mouse_button,
+                                                        cursor_positon.x,
+                                                        cursor_positon.y,
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                });
+                                //pointer_catch.clear();
+                                pointer_catch.retain(|(pointer_type, _)| {
+                                    match pointer_type {
+                                        PointerType::Cursor { mouse_button } => {
+                                            *mouse_button != button
+                                        }
+                                        _ => true
+                                    }
+                                });
                             }
                         }
                     }
-                    //println!("{} {}",cursor_positon.x,cursor_positon.y);
+
+                    WindowEvent::KeyboardInput {
+                        device_id, event, is_synthetic
+                    } => {
+
+                        let app = app.lock().unwrap();
+                        let focused_item_path = app.focused_item_path.clone();
+                        drop(app);
+                        if let Some(focused_item_path) = focused_item_path {
+                            if let Some(item) = pages.current_page().unwrap().find_item_mut(&focused_item_path) {
+                                let mut item = item.as_event_input();
+                                item.on_keyboard_input(KeyboardInput {
+                                    device_id,
+                                    event: event.clone(),
+                                    is_synthetic,
+                                });
+                            }
+                        }
+
+                        /*                        if let Some(page_item) = pages.current_page() {
+                                                    let mut item_stack = LinkedList::new();
+                                                    item_stack.push_back(page_item.root_id);
+                                                    while let Some(id) = item_stack.pop_front() {
+                                                        let item = page_item.items.get_mut(&id).unwrap();
+                                                        if item.get_enabled().get() {
+                                                            let consumed = item.as_event_input().on_keyboard_input(KeyboardInput {
+                                                                device_id,
+                                                                event: event.clone(),
+                                                                is_synthetic,
+                                                            });
+
+                                                            if consumed {
+                                                                break;
+                                                            }
+
+                                                            // if let Some(on_key_input) = item.get_on_key_input() {
+                                                            //     on_key_input(physical_key, logical_key, text, location, state, repeat, is_synthetic);
+                                                            // }
+                                                            if let Some(item_group) = item.as_item_group_mut() {
+                                                                for child in item_group.get_children_mut() {
+                                                                    item_stack.push_back(child);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                if let ElementState::Pressed = event.state {
+                                                    match event.logical_key {
+                                                        Named(named_key) => {
+                                                            match named_key {
+                                                                NamedKey::Enter => {
+                                                                    let focused_item_id = { app.lock().unwrap().focused_item_id };
+                                                                    if let Some(focused_item_id) = focused_item_id {
+                                                                        if let Some(item) = pages.current_page().unwrap().items.get_mut(&focused_item_id) {
+                                                                            if let Some(ime_inputable) = item.as_ime_inputable() {
+                                                                                ime_inputable.input(ImeAction::Enter);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                NamedKey::Backspace => {
+                                                                    let focused_item_id = { app.lock().unwrap().focused_item_id };
+                                                                    if let Some(focused_item_id) = focused_item_id {
+                                                                        if let Some(item) = pages.current_page().unwrap().items.get_mut(&focused_item_id) {
+                                                                            if let Some(ime_inputable) = item.as_ime_inputable() {
+                                                                                ime_inputable.input(ImeAction::Delete);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                NamedKey::Space => {
+                                                                    let focused_item_id = { app.lock().unwrap().focused_item_id };
+                                                                    if let Some(focused_item_id) = focused_item_id {
+                                                                        if let Some(item) = pages.current_page().unwrap().items.get_mut(&focused_item_id) {
+                                                                            if let Some(ime_inputable) = item.as_ime_inputable() {
+                                                                                ime_inputable.input(ImeAction::Commit(" ".to_string()));
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                _ => {}
+                                                            }
+                                                        }
+                                                        Key::Character(char) => {
+                                                            let focused_item_id = { app.lock().unwrap().focused_item_id };
+                                                            if let Some(focused_item_id) = focused_item_id {
+                                                                if let Some(item) = pages.current_page().unwrap().items.get_mut(&focused_item_id) {
+                                                                    if let Some(ime_inputable) = item.as_ime_inputable() {
+                                                                        ime_inputable.input(ImeAction::Commit(char.to_string()));
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        Key::Unidentified(_) => {}
+                                                        Key::Dead(_) => {}
+                                                    }
+                                                }*/
+                    }
+
+                    WindowEvent::Ime(ime) => {
+                        let app = app.lock().unwrap();
+                        let focused_item_path = &app.focused_item_path;
+                        if let Some(focused_item_path) = focused_item_path {
+                            if let Some(item) = pages.current_page().unwrap().find_item_mut(focused_item_path) {
+                                if let Some(ime_inputable) = item.as_ime_inputable() {
+                                    drop(app);
+                                    ime_inputable.input(match ime {
+                                        Ime::Enabled => ImeAction::Enabled,
+                                        Ime::Preedit(text, cursor_position) => ImeAction::Preedit(text, cursor_position),
+                                        Ime::Commit(text) => ImeAction::Commit(text),
+                                        Ime::Disabled => ImeAction::Disabled,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    WindowEvent::Touch(Touch {
+                                           device_id, phase, location, force, id
+                                       }) => {
+                        println!("Touch {:?}", phase);
+                    }
+
+                    WindowEvent::RedrawRequested => {
+                        let (width, height) = (app.content_width(), app.content_height());
+                        pages.iter_mut().for_each(|PageItem { root_item, .. }| {
+                            root_item.measure(0.0, 0.0, MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                        });
+
+                        let canvas = env.surface.canvas();
+                        canvas.save();
+                        let scale_factor = app.scale_factor();
+                        canvas.scale((scale_factor, scale_factor));
+                        canvas.clear(Color::WHITE);
+
+                        if let Some(PageItem { root_item, .. }) = pages.current_page() {
+                            root_item.draw(canvas);
+                        }
+
+                        canvas.restore();
+
+                        env.gr_context.flush_and_submit();
+                        env.gl_surface.swap_buffers(&env.gl_context).unwrap();
+                        app.redraw_done();
+                    }
+                    _ => {}
                 }
-                WindowEvent::KeyboardInput {
-                    input:
-                    KeyboardInput {
-                        virtual_keycode,
-                        modifiers,
-                        ..
-                    },
-                    ..
-                } => {
-                }
-                _ => (),
-            },
-            Event::RedrawRequested(_) => {
-                needs_redraw = true;
             }
-            _ => (),
+
+            _ => {}
         }
 
-        needs_redraw=needs_redraw||app.whether_need_redraw();
-
-        if needs_redraw{
-            let (width,height)=(app.content_width(),app.content_height());
-            pages.iter_mut().for_each(|(_,item)|{
-                item.measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
-                item.layout(0.0, 0.0, width, height);
-            });
-
-            let canvas = env.surface.canvas();
-            canvas.save();
-            let scale_factor=app.scale_factor();
-            canvas.scale((scale_factor,scale_factor));
-            canvas.clear(Color::WHITE);
-            
-            if let Some((_,item))=pages.current_page(){
-                item.draw(canvas);
-            }
-
-            canvas.restore();
-            
-            env.gr_context.flush_and_submit();
-            env.gl_surface.swap_buffers(&env.gl_context).unwrap();
-            app.set_need_redraw(false);
-        }
-
-        *control_flow = if needs_redraw {
-            ControlFlow::Poll
-        } else {
-            ControlFlow::Wait
-        };
-    });
-}
-
-fn dispatch_on_click(item: &Item, x: f32, y: f32) {
-    if let Some(on_click) = item.get_on_click() {
-        let layout_params = item.get_layout_params();
-        if x >= layout_params.x
-            && x <= layout_params.x + layout_params.width
-            && y >= layout_params.y
-            && y <= layout_params.y + layout_params.height
         {
-            on_click();
-        }
-    }
+            let mut app = app.lock().unwrap();
+            if let Some(request_focus_path) = &app.request_focus_path {
+                if let Some(focused_item_path) = &app.focused_item_path {
+                    let focused_item = pages.current_page().unwrap().find_item_mut(focused_item_path).unwrap();
+                    if let Some(on_blur) = focused_item.get_on_blur() {
+                        on_blur();
+                    }
+                }
 
-    if let Some(item_group) = item.as_item_group() {
-        for child in item_group.get_children() {
-            dispatch_on_click(child, x, y);
+                let item = pages.current_page().unwrap().find_item_mut(request_focus_path).unwrap();
+                if let Some(on_focus) = item.get_on_focus() {
+                    on_focus();
+                }
+                app.focused_item_path = Some(request_focus_path.clone());
+                app.request_focus_path = None;
+            }
+
+            if let Some(pc) = &app.pointer_catch {
+                pointer_catch.push(pc.clone());
+                app.pointer_catch = None;
+            }
         }
-    }
+
+        elwt.set_control_flow(ControlFlow::Wait);
+    }).unwrap();
 }
 
-pub fn create_window(window_builder: WindowBuilder,launch_page:Box<dyn Page>) {
-
-
-    let event_loop = EventLoop::new();
+pub fn create_window(window_builder: WindowBuilder, launch_page: Box<dyn Page>) {
+    let event_loop = EventLoop::new().unwrap();
 
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
@@ -252,7 +407,7 @@ pub fn create_window(window_builder: WindowBuilder,launch_page:Box<dyn Page>) {
 
         FramebufferInfo {
             fboid: fboid.try_into().unwrap(),
-            format: skia_safe::gpu::gl::Format::RGBA8.into(),
+            format: gpu::gl::Format::RGBA8.into(),
             ..Default::default()
         }
     };
@@ -263,9 +418,7 @@ pub fn create_window(window_builder: WindowBuilder,launch_page:Box<dyn Page>) {
 
     let surface = create_surface(&window, fb_info, &mut gr_context, num_samples, stencil_size);
 
-
-
-    let mut env = Env {
+    let env = Env {
         surface,
         gl_surface,
         gl_context,
@@ -275,17 +428,19 @@ pub fn create_window(window_builder: WindowBuilder,launch_page:Box<dyn Page>) {
         stencil_size,
     };
 
+    event_loop.set_control_flow(ControlFlow::Wait);
+
     let app = SharedApp::new(window);
     new_app(app.clone());
-    let mut pages =PageStack::new();
-    pages.launch(launch_page,app.clone());
-    run(app,pages, env, event_loop);
+    let mut pages = PageStack::new();
+    pages.launch(launch_page, app.clone());
+    run(app, pages, env, event_loop);
 }
 
 fn create_surface(
     window: &Window,
     fb_info: FramebufferInfo,
-    gr_context: &mut skia_safe::gpu::DirectContext,
+    gr_context: &mut gpu::DirectContext,
     num_samples: usize,
     stencil_size: usize,
 ) -> Surface {
