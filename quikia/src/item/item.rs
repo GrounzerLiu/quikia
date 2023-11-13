@@ -1,12 +1,14 @@
 use std::collections::{HashMap, LinkedList};
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Not};
 use std::slice::{Iter, IterMut};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+use lazy_static::lazy_static;
 use skia_safe::Canvas;
 use skia_safe::gpu::MipMapped::No;
 use winit::event::{DeviceId, ElementState, KeyEvent, MouseButton};
-use crate::app::ItemMap;
+use crate::app::{ItemMap, SharedApp};
 use crate::item::{Rectangle, Row, /*Stack,*/ TextBlock};
 use crate::property::{BoolProperty, FloatProperty, Gettable, Size, SizeProperty};
 
@@ -230,6 +232,7 @@ impl From<ElementState> for ButtonState {
 }
 
 pub trait EventInput {
+
     fn on_pointer_input(&mut self, action: PointerAction) -> bool {
         false
     }
@@ -248,14 +251,10 @@ pub trait EventInput {
 
     fn on_focus(&mut self) {}
 
-    fn on_timer_expired(&mut self, msg:&str) {}
+    fn on_timer_expired(&mut self, msg:String) {}
 }
 
 pub trait ItemTrait: EventInput + Layout + Drawable {
-    fn start_timer(&self, msg:&str, duration: Duration){
-
-    }
-
     fn get_id(&self) -> usize;
 
     fn get_path(&self) -> &ItemPath;
@@ -330,6 +329,35 @@ pub trait ItemTrait: EventInput + Layout + Drawable {
     fn get_on_focus(&self) -> Option<&Box<dyn Fn() + 'static>>;
     fn get_on_blur(&self) -> Option<&Box<dyn Fn() + 'static>>;
 }
+
+
+pub(crate) struct Timer{
+    inner:crate::app::Timer
+}
+
+impl Timer{
+    pub(crate) fn start(app:&SharedApp, item_path:&ItemPath, msg:&str, duration:Duration)->Self{
+
+        let item_path = item_path.clone();
+        let msg = msg.to_string();
+        let app = app.clone();
+
+        let timer=crate::app::Timer::new();
+        timer.start(duration,move ||{
+            app.send_event(crate::app::UserEvent::TimerExpired(item_path.clone(),msg.clone()));
+        });
+
+        Self{
+            inner:timer
+        }
+    }
+
+    pub(crate) fn cancel(&self){
+        self.inner.cancel();
+    }
+}
+
+
 
 pub trait ForEachActive<T> {
     fn for_each_active<F: FnMut(&T)>(&mut self, f: F);

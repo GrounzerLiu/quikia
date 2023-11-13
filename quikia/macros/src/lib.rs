@@ -130,9 +130,14 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
                 self.on_pointer_input = Some(Box::new(on_pointer_input));
                 self
             }
+
+            fn start_timer(&self, msg:&str, duration: std::time::Duration)->crate::item::Timer{
+                crate::item::Timer::start(&self.app, &self.path, msg, duration)
+            }
         }
 
         impl crate::item::ItemTrait for #name{
+
             fn get_id(&self) -> usize{
                 self.id
             }

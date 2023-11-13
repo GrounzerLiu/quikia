@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Range};
 use std::slice::Iter;
+use icu::properties::sets::print;
 use icu::segmenter::{GraphemeClusterSegmenter, LineSegmenter};
-use skia_safe::{Canvas, Color, FontMgr, FontStyle, Paint};
-use skia_safe::textlayout::{Decoration, FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextDecoration, TextStyle};
+use skia_safe::{Canvas, Color, FontMgr, FontStyle, Paint, Point};
+use skia_safe::textlayout::{Decoration, FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextBox, TextDecoration, TextRange, TextStyle};
 use crate::text::{Style, StyledText};
 
 /*pub struct TextLayout {
@@ -63,8 +64,10 @@ pub struct ParagraphWrapper {
     paragraph: Paragraph,
     range: Range<usize>,
     byte_to_utf16_indices: HashMap<usize, usize>,
+    utf16_to_byte_indices: HashMap<usize, usize>,
     glyph_to_byte_indices: HashMap<usize, usize>,
     byte_to_glyph_indices: HashMap<usize, usize>,
+    line_breaks: HashSet<TextRange>,
     glyph_length:usize,
     utf16_length:usize,
     byte_length:usize,
@@ -75,7 +78,8 @@ impl ParagraphWrapper {
         let mut text_style = TextStyle::default();
         text_style.set_font_size(30.0);
         text_style.set_color(Color::BLACK);
-        let style_segments = create_segments(text, &range, text_style);
+
+
 
         //let text = text[range.clone()].to_string();
 
@@ -86,20 +90,40 @@ impl ParagraphWrapper {
         font_collection.set_default_font_manager(FontMgr::default(), None);
 
         let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
-        style_segments.iter().for_each(|style_segment| {
-            paragraph_builder.add_style_segment(style_segment);
-        });
+
+        if text.len()==0{
+            let mut text = text.clone();
+            text.push(' ');
+            create_segments(&text, &range, text_style).iter().for_each(|style_segment| {
+                paragraph_builder.add_style_segment(style_segment);
+            });
+        }else {
+            create_segments(text, &range, text_style).iter().for_each(|style_segment| {
+                paragraph_builder.add_style_segment(style_segment);
+            });
+        };
+
+        // style_segments.iter().for_each(|style_segment| {
+        //     paragraph_builder.add_style_segment(style_segment);
+        // });
 
         let mut paragraph = paragraph_builder.build();
         paragraph.layout(max_width);
 
 
-        let mut utf16_indices = HashMap::new();
-        utf16_indices.insert(0, 0);
+        let mut byte_to_utf16_indices = HashMap::new();
+        byte_to_utf16_indices.insert(0, 0);
+
+        let mut utf16_to_byte_indices = HashMap::new();
+        utf16_to_byte_indices.insert(0, 0);
+
         let mut glyph_to_byte_indices = HashMap::new();
         glyph_to_byte_indices.insert(0, 0);
+
         let mut byte_to_glyph_indices = HashMap::new();
         byte_to_glyph_indices.insert(0, 0);
+
+        let mut line_breaks = HashSet::new();
 
         let mut glyph_index = 1;
 
@@ -112,10 +136,17 @@ impl ParagraphWrapper {
         let mut utf16_length = 0;
 
         while let Some(index) = iter.next() {
-            let str = &text[last_index.unwrap()..index];
+            let range = last_index.unwrap()..index;
+            let str = &text[range.clone()];
+
+            if str == "\r\n" || str == "\n" {
+                line_breaks.insert(range);
+            }
+
             let count = str.encode_utf16().count();
             let utf16_index = last_utf16_index + count;
-            utf16_indices.insert(index, utf16_index);
+            byte_to_utf16_indices.insert(index, utf16_index);
+            utf16_to_byte_indices.insert(utf16_index, index);
             utf16_length = utf16_index;
             last_utf16_index += count;
             last_index = Some(index);
@@ -130,9 +161,11 @@ impl ParagraphWrapper {
             //text,
             paragraph,
             range,
-            byte_to_utf16_indices: utf16_indices,
+            byte_to_utf16_indices,
+            utf16_to_byte_indices,
             glyph_to_byte_indices,
             byte_to_glyph_indices,
+            line_breaks,
             glyph_length,
             utf16_length,
             byte_length: text.len(),
@@ -152,7 +185,14 @@ impl ParagraphWrapper {
         self.paragraph.height()
     }
 
+    /// get the cursor position and height of the line at the index
+    /// * return (x,y,height)
     pub fn get_cursor_position(&self,index:usize)->(f32,f32,f32){
+        if self.byte_length== 0{
+            let boxes = self.paragraph.get_rects_for_range(0..1,RectHeightStyle::Max,RectWidthStyle::Tight);
+            let box0=boxes[0];
+            return (box0.rect.left, box0.rect.top,box0.rect.height())
+        }
         let is_end = index == self.byte_length;
         let index=if is_end{
             index-1
@@ -180,6 +220,12 @@ impl ParagraphWrapper {
         }
     }
 
+    pub fn get_rects_for_range(&self,range:Range<usize>)->Vec<TextBox>{
+        let utf16_start_index = *self.byte_to_utf16_indices.get(&range.start).unwrap();
+        let utf16_end_index = *self.byte_to_utf16_indices.get(&range.end).unwrap();
+        self.paragraph.get_rects_for_range(utf16_start_index..utf16_end_index,RectHeightStyle::Max,RectWidthStyle::Tight)
+    }
+
     pub fn glyph_index_to_byte_index(&self, glyph_index: usize) -> usize {
         if let Some(byte_index) = self.glyph_to_byte_indices.get(&glyph_index) {
             *byte_index
@@ -194,6 +240,27 @@ impl ParagraphWrapper {
         } else {
             panic!("the index of {} is not a grapheme cluster boundary", byte_index);
         }
+    }
+
+    pub fn get_closest_glyph_cluster_at(&self, point:impl Into<Point>)->usize{
+        let point=point.into();
+        let point_clone=point.clone();
+        let glyph_info=self.paragraph.get_closest_glyph_cluster_at(point);
+        if let Some(glyph_info)=glyph_info{
+            let bounds=glyph_info.bounds;
+            let center_x=(bounds.left+bounds.right)/2.0;
+            //println!("{:#?}", bounds);
+            if self.line_breaks.contains(&glyph_info.text_range){
+                return glyph_info.text_range.start;
+            }
+
+            return if point_clone.x < center_x {
+                glyph_info.text_range.start
+            } else {
+                glyph_info.text_range.end
+            }
+        }
+        0
     }
 
     pub fn glyph_length(&self)->usize{

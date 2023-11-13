@@ -48,7 +48,7 @@ impl Page for MainPage{
             .height(100)
 
             text_block!()
-            .text(r#"Hello🙅🏽‍♀️, world! "#)
+            .text("Hello🙅🏽‍♀️, world! ")
             .text_color(Color::WHITE)
             .text_size(16.0)
         )

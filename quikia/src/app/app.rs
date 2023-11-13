@@ -4,24 +4,25 @@ use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use winit::window::Window;
 use std::thread::ThreadId;
+use winit::event_loop::EventLoopProxy;
 use crate::item::{Item, ItemPath, PointerType};
 
 lazy_static!(
     pub(crate) static ref APPS:Mutex<LinkedList<(ThreadId, SharedApp)>> = Mutex::new(LinkedList::new());
     );
 
-pub(crate) fn current_app() -> Option<SharedApp>{
+pub(crate) fn current_app() -> Option<SharedApp> {
     let current_thread_id = std::thread::current().id();
     let apps = APPS.lock().unwrap();
-    for app in apps.iter(){
-        if app.0 == current_thread_id{
+    for app in apps.iter() {
+        if app.0 == current_thread_id {
             return Some(app.1.clone());
         }
     }
     None
 }
 
-pub(crate) fn new_app(app: SharedApp){
+pub(crate) fn new_app(app: SharedApp) {
     let mut apps = APPS.lock().unwrap();
     apps.push_back((std::thread::current().id(), app));
 }
@@ -32,24 +33,31 @@ pub enum LayoutDirection {
     RightToLeft,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum UserEvent {
+    TimerExpired(ItemPath,String)
+}
+
 pub struct App {
     window: Window,
     need_redraw: bool,
+    event_loop_proxy: EventLoopProxy<UserEvent>,
     layout_direction: LayoutDirection,
     pub(crate) focused_item_path: Option<ItemPath>,
     pub(crate) request_focus_path: Option<ItemPath>,
 
-    pub(crate) pointer_catch:Option<(PointerType,ItemPath)>,
+    pub(crate) pointer_catch: Option<(PointerType, ItemPath)>,
 
-    pub(crate) named_ids:HashMap<String,usize>,
-    pub(crate) unnamed_id:usize,
+    pub(crate) named_ids: HashMap<String, usize>,
+    pub(crate) unnamed_id: usize,
 }
 
 impl App {
-    pub fn new(window: Window) -> Self {
+    pub(crate) fn new(window: Window, event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
             window,
             need_redraw: false,
+            event_loop_proxy,
             layout_direction: LayoutDirection::LeftToRight,
             focused_item_path: None,
             request_focus_path: None,
@@ -59,19 +67,23 @@ impl App {
         }
     }
 
-    pub fn new_id(&mut self) -> usize{
+    pub fn new_id(&mut self) -> usize {
         self.unnamed_id += 1;
         self.unnamed_id
     }
 
-    pub fn id(&mut self, name: &str) -> usize{
-        if let Some(id) = self.named_ids.get(name){
+    pub fn id(&mut self, name: &str) -> usize {
+        if let Some(id) = self.named_ids.get(name) {
             *id
-        }else{
+        } else {
             let id = self.new_id();
             self.named_ids.insert(name.to_string(), id);
             id
         }
+    }
+
+    pub(crate) fn send_event(&self, event: UserEvent) {
+        self.event_loop_proxy.send_event(event).unwrap();
     }
 
     pub fn request_redraw(&mut self) {
@@ -93,11 +105,11 @@ impl App {
         self.need_redraw = false;
     }
 
-    pub fn request_focus(&mut self, path: &ItemPath){
+    pub fn request_focus(&mut self, path: &ItemPath) {
         self.request_focus_path = Some(path.clone());
     }
 
-    pub fn catch_pointer(&mut self, pointer_type: PointerType, path: &ItemPath){
+    pub fn catch_pointer(&mut self, pointer_type: PointerType, path: &ItemPath) {
         self.pointer_catch = Some((pointer_type, path.clone()));
     }
 
@@ -127,13 +139,13 @@ impl App {
 }
 
 pub struct SharedApp {
-    app: Arc<Mutex<App>>
+    app: Arc<Mutex<App>>,
 }
 
 impl SharedApp {
-    pub fn new(window: Window) -> Self {
+    pub(crate) fn new(window: Window, event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
-            app: Arc::new(Mutex::new(App::new(window)))
+            app: Arc::new(Mutex::new(App::new(window, event_loop_proxy)))
         }
     }
 
@@ -158,19 +170,23 @@ impl Deref for SharedApp {
 }
 
 impl SharedApp {
-    pub fn new_id(&self) -> usize{
+    pub fn new_id(&self) -> usize {
         self.app.lock().unwrap().new_id()
     }
 
-    pub fn id(&self, name: &str) -> usize{
+    pub fn id(&self, name: &str) -> usize {
         self.app.lock().unwrap().id(name)
     }
 
-    pub fn request_focus(&self, path: &ItemPath){
+    pub(crate) fn send_event(&self, event: UserEvent) {
+        self.app.lock().unwrap().send_event(event);
+    }
+
+    pub fn request_focus(&self, path: &ItemPath) {
         self.app.lock().unwrap().request_focus(path);
     }
 
-    pub fn catch_pointer(&self, pointer_type: PointerType, path: &ItemPath){
+    pub fn catch_pointer(&self, pointer_type: PointerType, path: &ItemPath) {
         self.app.lock().unwrap().catch_pointer(pointer_type, path);
     }
 

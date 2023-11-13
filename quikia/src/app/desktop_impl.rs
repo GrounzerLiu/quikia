@@ -26,9 +26,10 @@ use winit::{
 use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point};
 use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{ElementState, Ime, Touch};
+use winit::event_loop::{EventLoopBuilder, EventLoopProxy};
 use winit::keyboard::Key::Named;
 use winit::keyboard::{Key, NamedKey};
-use crate::app::{new_app, Page, PageItem, PageStack, SharedApp};
+use crate::app::{new_app, Page, PageItem, PageStack, SharedApp, UserEvent};
 use crate::item::{ButtonState, ImeAction, Item, ItemPath, KeyboardInput, MeasureMode, PointerAction, PointerType};
 use crate::property::Gettable;
 
@@ -42,7 +43,7 @@ struct Env {
     stencil_size: usize,
 }
 
-fn run(app: SharedApp, mut pages: PageStack, mut env: Env, event_loop: EventLoop<()>) {
+fn run(app: SharedApp, mut pages: PageStack, mut env: Env, event_loop: EventLoop<UserEvent>) {
     let mut cursor_positon = LogicalPosition::new(0.0_f32, 0.0_f32);
     let mut physical_cursor_positon = PhysicalPosition::new(0.0_f32, 0.0_f32);
 
@@ -50,6 +51,15 @@ fn run(app: SharedApp, mut pages: PageStack, mut env: Env, event_loop: EventLoop
 
     event_loop.run(move |event, elwt| {
         match event {
+            Event::UserEvent(user_event) => {
+                match user_event {
+                    UserEvent::TimerExpired(item_path, msg) => {
+                        let mut page_item = pages.current_page().unwrap();
+                        let mut item = page_item.find_item_mut(&item_path).unwrap().as_event_input();
+                        item.on_timer_expired(msg);
+                    }
+                }
+            }
             Event::WindowEvent { window_id, event } => {
                 match event {
                     WindowEvent::CloseRequested => {
@@ -143,7 +153,6 @@ fn run(app: SharedApp, mut pages: PageStack, mut env: Env, event_loop: EventLoop
                     WindowEvent::KeyboardInput {
                         device_id, event, is_synthetic
                     } => {
-
                         let app = app.lock().unwrap();
                         let focused_item_path = app.focused_item_path.clone();
                         drop(app);
@@ -321,7 +330,7 @@ fn run(app: SharedApp, mut pages: PageStack, mut env: Env, event_loop: EventLoop
 }
 
 pub fn create_window(window_builder: WindowBuilder, launch_page: Box<dyn Page>) {
-    let event_loop = EventLoop::new().unwrap();
+    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build().unwrap();
 
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
@@ -388,7 +397,7 @@ pub fn create_window(window_builder: WindowBuilder, launch_page: Box<dyn Page>) 
             .display()
             .get_proc_address(CString::new(s).unwrap().as_c_str())
     });
-    let interface = skia_safe::gpu::gl::Interface::new_load_with(|name| {
+    let interface = gpu::gl::Interface::new_load_with(|name| {
         if name == "eglGetCurrentDisplay" {
             return std::ptr::null();
         }
@@ -398,7 +407,7 @@ pub fn create_window(window_builder: WindowBuilder, launch_page: Box<dyn Page>) 
     })
         .expect("Could not create interface");
 
-    let mut gr_context = skia_safe::gpu::DirectContext::new_gl(Some(interface), None)
+    let mut gr_context = gpu::DirectContext::new_gl(Some(interface), None)
         .expect("Could not create direct context");
 
     let fb_info = {
@@ -430,7 +439,7 @@ pub fn create_window(window_builder: WindowBuilder, launch_page: Box<dyn Page>) 
 
     event_loop.set_control_flow(ControlFlow::Wait);
 
-    let app = SharedApp::new(window);
+    let app = SharedApp::new(window, event_loop.create_proxy());
     new_app(app.clone());
     let mut pages = PageStack::new();
     pages.launch(launch_page, app.clone());
