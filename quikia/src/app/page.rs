@@ -15,16 +15,30 @@ pub trait Page {
 
 pub struct PageItem {
     pub page: Box<dyn Page>,
-    pub root_item: Item,
+    pub root_item: Option<Item>,
 }
 
 impl PageItem {
     pub fn find_item(&self, path: &ItemPath) -> Option<&Item> {
-        self.root_item.find_item(path)
+        if self.root_item.is_none() {
+            return None;
+        }
+        self.root_item.as_ref().unwrap().find_item(path)
     }
 
     pub fn find_item_mut(&mut self, path: &ItemPath) -> Option<&mut Item> {
-        self.root_item.find_item_mut(path)
+        if self.root_item.is_none() {
+            return None;
+        }
+        self.root_item.as_mut().unwrap().find_item_mut(path)
+    }
+
+    pub fn root_item(&self) -> &Item {
+        self.root_item.as_ref().unwrap()
+    }
+
+    pub fn root_item_mut(&mut self) -> &mut Item {
+        self.root_item.as_mut().unwrap()
     }
 }
 
@@ -39,15 +53,22 @@ impl PageStack {
         }
     }
 
-    pub fn launch(&mut self, mut page: Box<dyn Page>, app: SharedApp) {
-        let item = page.build(app.clone());
-
-        page.on_create(app.clone());
+    pub fn push(&mut self, page: Box<dyn Page>) {
         self.pages.push_back(PageItem {
             page,
-            root_item: item,
+            root_item: None,
         });
     }
+
+    // pub fn launch(&mut self, mut page: Box<dyn Page>, app: SharedApp) {
+    //     let item = page.build(app.clone());
+    //
+    //     page.on_create(app.clone());
+    //     self.pages.push_back(PageItem {
+    //         page,
+    //         root_item: item,
+    //     });
+    // }
 
     pub fn exit(&mut self, app: SharedApp) {
         if let Some(PageItem { mut page, .. }) = self.pages.pop_back() {
@@ -70,10 +91,10 @@ impl PageStack {
 
 #[macro_export]
 macro_rules! clonify {
-    ($Fn:expr,$s:ident $(,$arg:ident)*) => {
+    (|$s:ident $(,$arg:ident)*|$Fn:block) => {
         {
             $(let $arg = $s.$arg.clone();)*
-            $Fn
+            move||$Fn
         }
     };
 }

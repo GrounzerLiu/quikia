@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use winit::window::Window;
 use std::thread::ThreadId;
 use winit::event_loop::EventLoopProxy;
-use crate::item::{Item, ItemPath, PointerType};
+use crate::item::{ItemPath, LayoutDirection, PointerType};
 
 lazy_static!(
     pub(crate) static ref APPS:Mutex<LinkedList<(ThreadId, SharedApp)>> = Mutex::new(LinkedList::new());
@@ -27,19 +27,13 @@ pub(crate) fn new_app(app: SharedApp) {
     apps.push_back((std::thread::current().id(), app));
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum LayoutDirection {
-    LeftToRight,
-    RightToLeft,
-}
-
 #[derive(Clone, Debug)]
 pub(crate) enum UserEvent {
     TimerExpired(ItemPath,String)
 }
 
 pub struct App {
-    window: Window,
+    window: Option<Window>,
     need_redraw: bool,
     event_loop_proxy: EventLoopProxy<UserEvent>,
     layout_direction: LayoutDirection,
@@ -53,9 +47,9 @@ pub struct App {
 }
 
 impl App {
-    pub(crate) fn new(window: Window, event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
-            window,
+            window: None,
             need_redraw: false,
             event_loop_proxy,
             layout_direction: LayoutDirection::LeftToRight,
@@ -82,6 +76,10 @@ impl App {
         }
     }
 
+    pub(crate) fn set_window(&mut self, window: Window) {
+        self.window = Some(window);
+    }
+
     pub(crate) fn send_event(&self, event: UserEvent) {
         self.event_loop_proxy.send_event(event).unwrap();
     }
@@ -89,16 +87,16 @@ impl App {
     pub fn request_redraw(&mut self) {
         if !self.need_redraw {
             self.need_redraw = true;
-            self.window.request_redraw();
+            self.window().request_redraw();
         }
     }
 
-    pub fn activate_ime(&mut self) {
-        self.window.set_ime_allowed(true);
+    pub fn activate_ime(&mut self){
+        self.window().set_ime_allowed(true);
     }
 
-    pub fn deactivate_ime(&mut self) {
-        self.window.set_ime_allowed(false);
+    pub fn deactivate_ime(&mut self){
+        self.window().set_ime_allowed(false);
     }
 
     pub fn redraw_done(&mut self) {
@@ -114,27 +112,31 @@ impl App {
     }
 
     pub fn window(&self) -> &Window {
-        &self.window
+        self.window.as_ref().unwrap()
     }
 
     pub fn window_mut(&mut self) -> &mut Window {
-        &mut self.window
+        self.window.as_mut().unwrap()
     }
 
     pub fn content_width(&self) -> f32 {
-        self.window.inner_size().width as f32 / self.window.scale_factor() as f32
+        self.window().inner_size().width as f32 / self.window().scale_factor() as f32
     }
 
     pub fn content_height(&self) -> f32 {
-        self.window.inner_size().height as f32 / self.window.scale_factor() as f32
+        self.window().inner_size().height as f32 / self.window().scale_factor() as f32
     }
 
     pub fn scale_factor(&self) -> f32 {
-        self.window.scale_factor() as f32
+        self.window().scale_factor() as f32
     }
 
     pub fn layout_direction(&self) -> LayoutDirection {
         self.layout_direction
+    }
+    
+    pub fn set_layout_direction(&mut self, layout_direction: LayoutDirection) {
+        self.layout_direction = layout_direction;
     }
 }
 
@@ -143,9 +145,9 @@ pub struct SharedApp {
 }
 
 impl SharedApp {
-    pub(crate) fn new(window: Window, event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
-            app: Arc::new(Mutex::new(App::new(window, event_loop_proxy)))
+            app: Arc::new(Mutex::new(App::new(event_loop_proxy)))
         }
     }
 
@@ -176,6 +178,10 @@ impl SharedApp {
 
     pub fn id(&self, name: &str) -> usize {
         self.app.lock().unwrap().id(name)
+    }
+
+    pub(crate) fn set_window(&self, window: Window) {
+        self.app.lock().unwrap().set_window(window);
     }
 
     pub(crate) fn send_event(&self, event: UserEvent) {
@@ -220,5 +226,9 @@ impl SharedApp {
 
     pub fn layout_direction(&self) -> LayoutDirection {
         self.app.lock().unwrap().layout_direction()
+    }
+    
+    pub fn set_layout_direction(&self, layout_direction: LayoutDirection) {
+        self.app.lock().unwrap().set_layout_direction(layout_direction);
     }
 }

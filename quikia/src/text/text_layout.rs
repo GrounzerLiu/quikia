@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::mem::swap;
 use std::ops::{Add, Range};
 use std::slice::Iter;
 use icu::properties::sets::print;
 use icu::segmenter::{GraphemeClusterSegmenter, LineSegmenter};
 use skia_safe::{Canvas, Color, FontMgr, FontStyle, Paint, Point};
-use skia_safe::textlayout::{Decoration, FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextBox, TextDecoration, TextRange, TextStyle};
+use skia_safe::textlayout::{Decoration, FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextBox, TextDecoration, TextDirection, TextRange, TextStyle};
 use crate::text::{Style, StyledText};
 
 /*pub struct TextLayout {
@@ -68,36 +69,32 @@ pub struct ParagraphWrapper {
     glyph_to_byte_indices: HashMap<usize, usize>,
     byte_to_glyph_indices: HashMap<usize, usize>,
     line_breaks: HashSet<TextRange>,
-    glyph_length:usize,
-    utf16_length:usize,
-    byte_length:usize,
+    glyph_length: usize,
+    utf16_length: usize,
+    byte_length: usize,
 }
 
 impl ParagraphWrapper {
-    pub fn new(text: &StyledText, range: Range<usize>, max_width: f32) -> ParagraphWrapper {
+    pub fn new(text: &StyledText, range: Range<usize>, max_width: f32, text_align: TextAlign) -> ParagraphWrapper {
         let mut text_style = TextStyle::default();
         text_style.set_font_size(30.0);
         text_style.set_color(Color::BLACK);
 
-
-
-        //let text = text[range.clone()].to_string();
-
         let mut paragraph_style = ParagraphStyle::default();
-        paragraph_style.set_text_align(TextAlign::Start);
+        paragraph_style.set_text_align(text_align);
 
         let mut font_collection = FontCollection::new();
         font_collection.set_default_font_manager(FontMgr::default(), None);
 
         let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
 
-        if text.len()==0{
+        if text.len() == 0 {
             let mut text = text.clone();
             text.push(' ');
             create_segments(&text, &range, text_style).iter().for_each(|style_segment| {
                 paragraph_builder.add_style_segment(style_segment);
             });
-        }else {
+        } else {
             create_segments(text, &range, text_style).iter().for_each(|style_segment| {
                 paragraph_builder.add_style_segment(style_segment);
             });
@@ -178,7 +175,7 @@ impl ParagraphWrapper {
     }
 
     pub fn layout_width(&self) -> f32 {
-        self.paragraph.max_intrinsic_width()
+        self.paragraph.max_width()
     }
 
     pub fn layout_height(&self) -> f32 {
@@ -187,43 +184,52 @@ impl ParagraphWrapper {
 
     /// get the cursor position and height of the line at the index
     /// * return (x,y,height)
-    pub fn get_cursor_position(&self,index:usize)->(f32,f32,f32){
-        if self.byte_length== 0{
-            let boxes = self.paragraph.get_rects_for_range(0..1,RectHeightStyle::Max,RectWidthStyle::Tight);
-            let box0=boxes[0];
-            return (box0.rect.left, box0.rect.top,box0.rect.height())
+    pub fn get_cursor_position(&self, index: usize) -> (f32, f32, f32) {
+        if self.byte_length == 0 {
+            let boxes = self.paragraph.get_rects_for_range(0..1, RectHeightStyle::Max, RectWidthStyle::Tight);
+            let box0 = boxes[0];
+            return (box0.rect.left, box0.rect.top, box0.rect.height());
         }
-        let is_end = index == self.byte_length;
-        let index=if is_end{
-            index-1
-        }
-        else {
-            index
-        };
-        let utf16_index = *self.byte_to_utf16_indices.get(&index).unwrap();
+        let is_start = index == 0;
+
+        let mut utf16_index = *self.byte_to_utf16_indices.get(&index).expect(format!("index:{} is not a grapheme cluster boundary", index).as_str());
         let glyph_index = *self.byte_to_glyph_indices.get(&index).unwrap();
-        let next_byte_index = *self.glyph_to_byte_indices.get(&(glyph_index + 1)).unwrap();
-        let next_utf16_index = *self.byte_to_utf16_indices.get(&next_byte_index).unwrap();
-        let boxes = self.paragraph.get_rects_for_range(utf16_index..next_utf16_index,RectHeightStyle::Max,RectWidthStyle::Tight);
-        if boxes.len()> 1{
-            panic!("something wrong, utf16_index:{},next_utf16_index:{},boxes:{:?}",utf16_index,next_utf16_index,boxes);
-        }
-        if boxes.len() == 0{
-            panic!("something wrong, utf16_index:{},next_utf16_index:{},boxes:{:?}",utf16_index,next_utf16_index,boxes);
-        }
-        let box0=boxes[0];
-        if is_end{
-            (box0.rect.right, box0.rect.top,box0.rect.height())
-        }
-        else{
-            (box0.rect.left, box0.rect.top,box0.rect.height())
+        return if is_start {
+            let next_byte_index = *self.glyph_to_byte_indices.get(&(glyph_index + 1)).unwrap();
+            let next_utf16_index = *self.byte_to_utf16_indices.get(&next_byte_index).unwrap();
+            let boxes = self.paragraph.get_rects_for_range(utf16_index..next_utf16_index, RectHeightStyle::Max, RectWidthStyle::Tight);
+            let box0 = boxes[0];
+            if box0.direct == TextDirection::LTR {
+                (box0.rect.left, box0.rect.top, box0.rect.height())
+            } else {
+                (box0.rect.right, box0.rect.top, box0.rect.height())
+            }
+        } else {
+            let prev_byte_index = *self.glyph_to_byte_indices.get(&(glyph_index - 1)).unwrap();
+            let prev_utf16_index = *self.byte_to_utf16_indices.get(&prev_byte_index).unwrap();
+
+            if self.line_breaks.contains(&(prev_byte_index..index)) {
+                let next_byte_index = *self.glyph_to_byte_indices.get(&(glyph_index + 1)).unwrap();
+                let next_utf16_index = *self.byte_to_utf16_indices.get(&next_byte_index).unwrap();
+                let boxes = self.paragraph.get_rects_for_range(utf16_index..next_utf16_index, RectHeightStyle::Max, RectWidthStyle::Tight);
+                let box0 = boxes[0];
+                (box0.rect.left, box0.rect.top, box0.rect.height())
+            } else {
+                let boxes = self.paragraph.get_rects_for_range(prev_utf16_index..utf16_index, RectHeightStyle::Max, RectWidthStyle::Tight);
+                let box0 = boxes[0];
+                if box0.direct == TextDirection::LTR {
+                    (box0.rect.right, box0.rect.top, box0.rect.height())
+                } else {
+                    (box0.rect.left, box0.rect.top, box0.rect.height())
+                }
+            }
         }
     }
 
-    pub fn get_rects_for_range(&self,range:Range<usize>)->Vec<TextBox>{
+    pub fn get_rects_for_range(&self, range: Range<usize>) -> Vec<TextBox> {
         let utf16_start_index = *self.byte_to_utf16_indices.get(&range.start).unwrap();
         let utf16_end_index = *self.byte_to_utf16_indices.get(&range.end).unwrap();
-        self.paragraph.get_rects_for_range(utf16_start_index..utf16_end_index,RectHeightStyle::Max,RectWidthStyle::Tight)
+        self.paragraph.get_rects_for_range(utf16_start_index..utf16_end_index, RectHeightStyle::Max, RectWidthStyle::Tight)
     }
 
     pub fn glyph_index_to_byte_index(&self, glyph_index: usize) -> usize {
@@ -242,36 +248,44 @@ impl ParagraphWrapper {
         }
     }
 
-    pub fn get_closest_glyph_cluster_at(&self, point:impl Into<Point>)->usize{
-        let point=point.into();
-        let point_clone=point.clone();
-        let glyph_info=self.paragraph.get_closest_glyph_cluster_at(point);
-        if let Some(glyph_info)=glyph_info{
-            let bounds=glyph_info.bounds;
-            let center_x=(bounds.left+bounds.right)/2.0;
+    pub fn get_closest_glyph_cluster_at(&self, point: impl Into<Point>) -> usize {
+        let point = point.into();
+        let point_clone = point.clone();
+        let glyph_info = self.paragraph.get_closest_glyph_cluster_at(point);
+        if let Some(glyph_info) = glyph_info {
+            let bounds = glyph_info.bounds;
+            let center_x = (bounds.left + bounds.right) / 2.0;
             //println!("{:#?}", bounds);
-            if self.line_breaks.contains(&glyph_info.text_range){
+            if self.line_breaks.contains(&glyph_info.text_range) {
                 return glyph_info.text_range.start;
             }
 
             return if point_clone.x < center_x {
-                glyph_info.text_range.start
+                if glyph_info.position == TextDirection::LTR {
+                    glyph_info.text_range.start
+                } else {
+                    glyph_info.text_range.end
+                }
             } else {
-                glyph_info.text_range.end
-            }
+                if glyph_info.position == TextDirection::LTR {
+                    glyph_info.text_range.end
+                } else {
+                    glyph_info.text_range.start
+                }
+            };
         }
         0
     }
 
-    pub fn glyph_length(&self)->usize{
+    pub fn glyph_length(&self) -> usize {
         self.glyph_length
     }
 
-    pub fn utf16_length(&self)->usize{
+    pub fn utf16_length(&self) -> usize {
         self.utf16_length
     }
 
-    pub fn byte_length(&self)->usize{
+    pub fn byte_length(&self) -> usize {
         self.byte_length
     }
 }
@@ -362,12 +376,12 @@ impl<'text> StyleSegment<'text> {
                 }
             }
             Style::Underline => {
-                let mut ty=self.text_style.decoration().clone();
+                let mut ty = self.text_style.decoration().clone();
                 ty.ty.insert(TextDecoration::UNDERLINE);
                 self.text_style.set_decoration(&ty);
             }
             Style::Strikethrough => {
-                let mut ty=self.text_style.decoration().clone();
+                let mut ty = self.text_style.decoration().clone();
                 ty.ty.insert(TextDecoration::LINE_THROUGH);
                 self.text_style.set_decoration(&ty);
             }

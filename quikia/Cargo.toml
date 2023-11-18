@@ -9,10 +9,13 @@ edition = "2021"
 lazy_static = "1.4.0"
 glutin = "0.31.1"
 glutin-winit = "0.4.2"
-winit = "0.29.3"
+winit = {version = "0.29.3",features = ["android-native-activity"]}
 gl = "0.14.0"
 raw-window-handle = "0.5.2"
-skia-safe = {version = "0.68.0",features = ["gpu","gl","textlayout","svg","embed-icudtl"]}
+skia-safe = {version = "0.68.0",features = ["gpu","gl","textlayout","embed-icudtl"]}
 env_logger = "0.10.0"
 icu = "1.3.2"
 macros={path = "macros"}
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.13.3"

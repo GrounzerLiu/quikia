@@ -1,13 +1,13 @@
 mod app;
 mod page;
-mod desktop_impl;
+mod window;
 
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 pub use app::*;
 pub use page::*;
-pub use desktop_impl::*;
+pub use window::*;
 
 pub struct Timer {
     inner: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
