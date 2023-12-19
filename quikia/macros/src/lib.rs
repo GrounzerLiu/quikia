@@ -66,7 +66,7 @@ pub fn item(_: TokenStream, input: TokenStream) -> TokenStream {
                     let app = self.app.clone();
                     self.#name.lock().add_observer(
                         crate::property::Observer::new_without_id(move ||{
-                        app.request_redraw();
+                        app.need_re_layout();
                     }));
                     self
                 }

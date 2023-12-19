@@ -125,7 +125,7 @@ impl StyledText {
         self.remove_style(style, range.clone());
         self.styles.push((style_clone, range, boundary_type));
 
-        self.notify();
+        //self.notify();
     }
 
     pub fn get_styles(&self, range: Range<usize>) -> Vec<(Style, Range<usize>, EdgeBehavior)> {
@@ -209,7 +209,7 @@ impl StyledText {
 
         self.styles.append(&mut segmented_styles);
 
-        self.notify();
+        //self.notify();
     }
 
     pub fn clear_styles(&mut self) {
@@ -257,6 +257,12 @@ impl PartialEq<StyledText> for &str {
 impl From<String> for StyledText {
     fn from(string: String) -> Self {
         StyledText::new(string)
+    }
+}
+
+impl From<&str> for StyledText {
+    fn from(string: &str) -> Self {
+        StyledText::new(string.to_string())
     }
 }
 
@@ -316,40 +322,4 @@ pub(crate) fn foreach_grapheme_cluster(text: &str, mut f: impl FnMut(Range<usize
     }
     None
 }
-
-/*pub struct GraphemeIterator<'text> {
-    text: &'text str,
-    last_index: Option<usize>,
-    grapheme_cluster_segmenter:GraphemeClusterSegmenter,
-    grapheme_cluster_break_iterator:GraphemeClusterBreakIteratorUtf8<'text,'text>
-}
-
-impl<'text> GraphemeIterator<'text> {
-    pub fn new(text: &'text str, grapheme_cluster_segmenter: GraphemeClusterSegmenter) -> Self {
-        let mut grapheme_cluster_break_iterator = grapheme_cluster_segmenter.segment_str(text);
-        let last_index = grapheme_cluster_break_iterator.next();
-        GraphemeIterator {
-            text,
-            last_index,
-            grapheme_cluster_segmenter,
-            grapheme_cluster_break_iterator,
-        }
-    }
-}
-
-impl<'text> Iterator for GraphemeIterator<'text> {
-    type Item = Range<usize>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(last_index)=self.last_index{
-            if let Some(index)=self.grapheme_cluster_break_iterator.next(){
-                let range=last_index..index;
-                self.last_index=Some(index);
-                return Some(range);
-            }
-        }
-        None
-    }
-}
-*/
 

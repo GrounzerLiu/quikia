@@ -1,7 +1,7 @@
-use std::{
-    ffi::CString,
-    num::NonZeroU32,
-};
+
+use winapi::shared::windef::HWND__;
+use std::{ffi::CString, fs, num::NonZeroU32};
+use std::time::Instant;
 use gl::types::*;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
@@ -15,14 +15,19 @@ use glutin::{
 };
 use glutin::context::NotCurrentGlContext;
 use glutin_winit::DisplayBuilder;
-use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
-use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Typeface, Rect, FontStyle, FontMgr};
+use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Rect, FontStyle, FontMgr, Data, Picture, ISize, AlphaType, ColorFilter, BlendMode, ImageInfo, Color4f, ImageFilter, SamplingOptions, FilterMode, MipmapMode, Image, TileMode};
+use skia_safe::canvas::SaveLayerRec;
+use skia_safe::image_filters::{blur, CropRect};
+use skia_safe::svg::{Canvas, Dom};
+use skia_safe::wrapper::PointerWrapper;
+use winapi::shared::minwindef::TRUE;
 use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{ElementState, Ime, Touch, TouchPhase};
 use winit::event_loop::{EventLoopBuilder, EventLoopWindowTarget};
@@ -30,8 +35,13 @@ use winit::event_loop::{EventLoopBuilder, EventLoopWindowTarget};
 use winit::platform::android::activity::AndroidApp;
 #[cfg(target_os = "android")]
 use winit::platform::android::EventLoopBuilderExtAndroid;
-use crate::app::{new_app, Page, PageStack, SharedApp, UserEvent};
-use crate::item::{ButtonState, ImeAction, ItemPath, KeyboardInput, MeasureMode, PointerType};
+
+use crate::anim::Animation;
+use crate::app::{ANIMATIONS, new_app, Page, PageStack, set_acrylic, set_areo, SharedApp, Theme, ThemeColor, UserEvent};
+use crate::item::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
+//use crate::old_item::{ButtonState, ImeAction, ItemPath, KeyboardInput, MeasureMode, PointerType};
+
+use winapi::um::dwmapi::{DWM_BB_ENABLE, DWM_BLURBEHIND, DwmEnableBlurBehindWindow};
 
 struct Env {
     surface: Surface,
@@ -152,21 +162,39 @@ fn init_env(elwt: &EventLoopWindowTarget<UserEvent>) -> (Env, Window) {
 }
 
 fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Page>) {
-    let mut cursor_positon = LogicalPosition::new(0.0_f32, 0.0_f32);
-    let mut physical_cursor_positon = PhysicalPosition::new(0.0_f32, 0.0_f32);
+    let mut cursor_position = LogicalPosition::new(0.0_f32, 0.0_f32);
+    let mut physical_cursor_position = PhysicalPosition::new(0.0_f32, 0.0_f32);
 
-    let mut pointer_catch: Vec<(PointerType, ItemPath)> = Vec::new();
+    let mut pointer_catch: Vec<(PointerType, usize)> = Vec::new();
 
     let mut pages = PageStack::new();
     pages.push(launch_page);
 
     let mut env = None;
 
-    let mut info=String::new();
+    let mut info = String::new();
+
+    let wallpaper = get_wallpaper();
 
     event_loop.run(move |event, elwt| {
         if let Event::Resumed = event {
             let (inited_env, window) = init_env(elwt);
+
+            match window.raw_window_handle() {
+                RawWindowHandle::Win32(handle) => {
+                    //set_acrylic(handle.hwnd)
+                    /*let d=DWM_BLURBEHIND{
+                        dwFlags: DWM_BB_ENABLE,
+                        fEnable: TRUE,
+                        hRgnBlur: std::ptr::null_mut(),
+                        fTransitionOnMaximized: TRUE,
+                    };
+                    unsafe { DwmEnableBlurBehindWindow(handle.hwnd as *mut HWND__, std::ptr::addr_of!(d)); }
+                    winapi::um::winuser::SetWindowCom*/
+                }
+                _=>{}
+            }
+
             env = Some(inited_env);
             app.set_window(window);
             let current_page_item = pages.current_page().unwrap();
@@ -183,18 +211,21 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
 
         match event {
             Event::UserEvent(user_event) => {
-                match user_event {
-                    UserEvent::TimerExpired(item_path, msg) => {
-                        let mut page_item = pages.current_page().unwrap();
-                        let mut item = page_item.find_item_mut(&item_path).unwrap().as_event_input();
-                        item.on_timer_expired(msg);
-                    }
-                }
+                // match user_event {
+                //     UserEvent::TimerExpired(item_path, msg) => {
+                //         let mut page_item = pages.current_page().unwrap();
+                //         let mut old_item = page_item.find_item_mut(&item_path).unwrap().as_event_input();
+                //         old_item.on_timer_expired(msg);
+                //     }
+                // }
             }
             Event::WindowEvent { window_id, event } => {
                 match event {
                     WindowEvent::CloseRequested => {
                         elwt.exit();
+                    }
+                    WindowEvent::Moved(_) => {
+                        app.request_redraw();
                     }
                     WindowEvent::Resized(physical_size) => {
                         let env = env.as_mut().unwrap();
@@ -223,21 +254,21 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                         })
                     }
                     WindowEvent::CursorMoved { device_id, position, .. } => {
-                        physical_cursor_positon.x = position.x as f32;
-                        physical_cursor_positon.y = position.y as f32;
+                        physical_cursor_position.x = position.x as f32;
+                        physical_cursor_position.y = position.y as f32;
                         let scale_factor = app.scale_factor();
-                        cursor_positon = position.to_logical(scale_factor as f64);
+                        cursor_position = position.to_logical(scale_factor as f64);
 
-                        pointer_catch.iter().for_each(|(pointer_type, path)| {
+                        pointer_catch.iter().for_each(|(pointer_type, id)| {
                             match pointer_type {
                                 PointerType::Cursor { mouse_button } => {
-                                    if let Some(item) = pages.current_page().unwrap().find_item_mut(path) {
-                                        item.as_event_input().on_mouse_input(
+                                    if let Some(item) = pages.current_page().unwrap().find_item_mut(*id) {
+                                        item.mouse_input(
                                             device_id,
                                             ButtonState::Moved,
                                             *mouse_button,
-                                            cursor_positon.x,
-                                            cursor_positon.y,
+                                            cursor_position.x,
+                                            cursor_position.y,
                                         );
                                     }
                                 }
@@ -245,28 +276,28 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                             }
                         });
 
-                        pages.current_page().unwrap().root_item_mut().as_event_input().on_cursor_moved(cursor_positon.x, cursor_positon.y);
+                        //pages.current_page().unwrap().root_item_mut().as_event_input().on_cursor_moved(cursor_position.x, cursor_position.y);
                     }
                     WindowEvent::MouseInput { device_id, state, button } => {
+                        //println!("pointer_catch={:?}", pointer_catch);
                         match state {
                             ElementState::Pressed => {
                                 pages.current_page().unwrap()
                                     .root_item_mut()
-                                    .as_event_input()
-                                    .on_mouse_input(device_id, state.into(), button, cursor_positon.x, cursor_positon.y);
+                                    .mouse_input(device_id, state.into(), button, cursor_position.x, cursor_position.y);
                             }
                             ElementState::Released => {
-                                pointer_catch.iter().for_each(|(pointer_type, path)| {
+                                pointer_catch.iter().for_each(|(pointer_type, id)| {
                                     match pointer_type {
                                         PointerType::Cursor { mouse_button } => {
                                             if *mouse_button == button {
-                                                if let Some(item) = pages.current_page().unwrap().find_item_mut(path) {
-                                                    item.as_event_input().on_mouse_input(
+                                                if let Some(item) = pages.current_page().unwrap().find_item_mut(*id) {
+                                                    item.mouse_input(
                                                         device_id,
                                                         ButtonState::Released,
                                                         *mouse_button,
-                                                        cursor_positon.x,
-                                                        cursor_positon.y,
+                                                        cursor_position.x,
+                                                        cursor_position.y,
                                                     );
                                                 }
                                             }
@@ -286,147 +317,118 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                         }
                     }
 
-                    WindowEvent::KeyboardInput {
-                        device_id, event, is_synthetic
-                    } => {
-                        let app = app.lock().unwrap();
-                        let focused_item_path = app.focused_item_path.clone();
-                        drop(app);
-                        if let Some(focused_item_path) = focused_item_path {
-                            if let Some(item) = pages.current_page().unwrap().find_item_mut(&focused_item_path) {
-                                let mut item = item.as_event_input();
-                                item.on_keyboard_input(KeyboardInput {
-                                    device_id,
-                                    event: event.clone(),
-                                    is_synthetic,
-                                });
-                            }
-                        }
-                    }
+                    /*                    WindowEvent::KeyboardInput {
+                                            device_id, event, is_synthetic
+                                        } => {
+                                            let app = app.lock().unwrap();
+                                            let focused_item_path = app.focused_item_path.clone();
+                                            drop(app);
+                                            if let Some(focused_item_path) = focused_item_path {
+                                                if let Some(old_item) = pages.current_page().unwrap().find_item_mut(&focused_item_path) {
+                                                    let mut old_item = old_item.as_event_input();
+                                                    old_item.on_keyboard_input(KeyboardInput {
+                                                        device_id,
+                                                        event: event.clone(),
+                                                        is_synthetic,
+                                                    });
+                                                }
+                                            }
+                                        }*/
 
                     WindowEvent::Ime(ime) => {
                         let app = app.lock().unwrap();
-                        let focused_item_path = &app.focused_item_path;
+                        let focused_item_path = &app.focused_item_id;
                         if let Some(focused_item_path) = focused_item_path {
-                            if let Some(item) = pages.current_page().unwrap().find_item_mut(focused_item_path) {
-                                if let Some(ime_inputable) = item.as_ime_inputable() {
-                                    drop(app);
-                                    ime_inputable.input(match ime {
-                                        Ime::Enabled => ImeAction::Enabled,
-                                        Ime::Preedit(text, cursor_position) => ImeAction::Preedit(text, cursor_position),
-                                        Ime::Commit(text) => ImeAction::Commit(text),
-                                        Ime::Disabled => ImeAction::Disabled,
-                                    });
-                                }
+                            if let Some(item) = pages.current_page().unwrap().find_item_mut(*focused_item_path) {
+                                drop(app);
+                                item.ime_input(match ime {
+                                    Ime::Enabled => ImeAction::Enabled,
+                                    Ime::Preedit(text, cursor_position) => ImeAction::Preedit(text, cursor_position),
+                                    Ime::Commit(text) => ImeAction::Commit(text),
+                                    Ime::Disabled => ImeAction::Disabled,
+                                });
                             }
                         }
                     }
 
-                    WindowEvent::Touch(Touch {
-                                           device_id, phase, location, force, id
-                                       }) => {
-                        let scale_factor = app.scale_factor();
-                        let location = LogicalPosition::new(location.x as f32 / scale_factor, location.y as f32 / scale_factor);
-                        match phase {
-                            TouchPhase::Started => {
-                                pages.current_page().unwrap()
-                                    .root_item_mut()
-                                    .as_event_input()
-                                    .on_touch(device_id.clone(), phase.clone(), location.clone(), force.clone(), id.clone());
-                            }
-                            TouchPhase::Moved => {
-                                // pages.current_page().unwrap().root_item_mut().as_event_input().on_touch(
-                                //     device_id.clone(),
-                                //     phase.clone(),
-                                //     location.clone(),
-                                //     force.clone(),
-                                //     id.clone(),
-                                // );
-                                info.push_str(format!("pointer_catch={:?}\n",pointer_catch).as_str());
-                                pointer_catch.iter().for_each(|(pointer_type, path)| {
-                                    match pointer_type {
-                                        PointerType::Touch { id:pid } => {
-                                            //if *pid == id {
-                                                if let Some(item) = pages.current_page().unwrap().find_item_mut(path) {
-                                                    item.as_event_input().on_touch(
-                                                        device_id.clone(),
-                                                        phase.clone(),
-                                                        location.clone(),
-                                                        force.clone(),
-                                                        id.clone(),
-                                                    );
-                                                }
-                                            //}
-                                        }
-                                        _ => {}
-                                    }
-                                });
-                            }
-                            TouchPhase::Ended => {
-                                pointer_catch.iter().for_each(|(pointer_type, path)| {
-                                    match pointer_type {
-                                        PointerType::Touch { id:pid } => {
-                                            if *pid == id {
-                                                if let Some(item) = pages.current_page().unwrap().find_item_mut(path) {
-                                                    item.as_event_input().on_touch(
-                                                        device_id.clone(),
-                                                        phase.clone(),
-                                                        location.clone(),
-                                                        force.clone(),
-                                                        id.clone(),
-                                                    );
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                });
-                                pointer_catch.retain(|(pointer_type, _)| {
-                                    match pointer_type {
-                                        PointerType::Touch { id:pid } => {
-                                            *pid != id
-                                        }
-                                        _ => true
-                                    }
-                                });
-                            }
-                            TouchPhase::Cancelled => {}
-                        }
-                    }
+                    /*                                        WindowEvent::Touch(Touch {
+                                                                                   device_id, phase, location, force, id
+                                                                               }) => {
+                                                                let scale_factor = app.scale_factor();
+                                                                let location = LogicalPosition::new(location.x as f32 / scale_factor, location.y as f32 / scale_factor);
+                                                                match phase {
+                                                                    TouchPhase::Started => {
+                                                                        pages.current_page().unwrap()
+                                                                            .root_item_mut()
+                                                                            .as_event_input()
+                                                                            .on_touch(device_id.clone(), phase.clone(), location.clone(), force.clone(), id.clone());
+                                                                    }
+                                                                    TouchPhase::Moved => {
+                                                                        // pages.current_page().unwrap().root_item_mut().as_event_input().on_touch(
+                                                                        //     device_id.clone(),
+                                                                        //     phase.clone(),
+                                                                        //     location.clone(),
+                                                                        //     force.clone(),
+                                                                        //     id.clone(),
+                                                                        // );
+                                                                        info.push_str(format!("pointer_catch={:?}\n",pointer_catch).as_str());
+                                                                        pointer_catch.iter().for_each(|(pointer_type, path)| {
+                                                                            match pointer_type {
+                                                                                PointerType::Touch { id:pid } => {
+                                                                                    //if *pid == id {
+                                                                                        if let Some(old_item) = pages.current_page().unwrap().find_item_mut(path) {
+                                                                                            old_item.as_event_input().on_touch(
+                                                                                                device_id.clone(),
+                                                                                                phase.clone(),
+                                                                                                location.clone(),
+                                                                                                force.clone(),
+                                                                                                id.clone(),
+                                                                                            );
+                                                                                        }
+                                                                                    //}
+                                                                                }
+                                                                                _ => {}
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                    TouchPhase::Ended => {
+                                                                        pointer_catch.iter().for_each(|(pointer_type, path)| {
+                                                                            match pointer_type {
+                                                                                PointerType::Touch { id:pid } => {
+                                                                                    if *pid == id {
+                                                                                        if let Some(old_item) = pages.current_page().unwrap().find_item_mut(path) {
+                                                                                            old_item.as_event_input().on_touch(
+                                                                                                device_id.clone(),
+                                                                                                phase.clone(),
+                                                                                                location.clone(),
+                                                                                                force.clone(),
+                                                                                                id.clone(),
+                                                                                            );
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                                _ => {}
+                                                                            }
+                                                                        });
+                                                                        pointer_catch.retain(|(pointer_type, _)| {
+                                                                            match pointer_type {
+                                                                                PointerType::Touch { id:pid } => {
+                                                                                    *pid != id
+                                                                                }
+                                                                                _ => true
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                    TouchPhase::Cancelled => {}
+                                                                }
+                                                            }
 
-                    WindowEvent::MouseWheel { device_id, delta, phase } => {
-                        pages.current_page().unwrap().root_item_mut().as_event_input().on_mouse_wheel(delta);
-                    }
+                                                            WindowEvent::MouseWheel { device_id, delta, phase } => {
+                                                                pages.current_page().unwrap().root_item_mut().as_event_input().on_mouse_wheel(delta);
+                                                            }*/
 
                     WindowEvent::RedrawRequested => {
-                        let env = env.as_mut().unwrap();
-                        let (width, height) = (app.content_width(), app.content_height());
-                        pages.iter_mut().for_each(|page_item| {
-                            page_item.root_item_mut().measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
-                            page_item.root_item_mut().layout(0.0, 0.0);
-                        });
-
-                        let canvas = env.surface.canvas();
-                        canvas.save();
-                        let scale_factor = app.scale_factor();
-                        canvas.scale((scale_factor, scale_factor));
-                        canvas.clear(Color::WHITE);
-
-                        if let Some(page_item) = pages.current_page() {
-                            page_item.root_item_mut().draw(canvas);
-                        }
-
-/*                        let mut text=StyledText::new(info.clone());
-                        text.set_style(Style::TextColor(Color::BLACK),0..text.len(),EdgeBehavior::ExcludeAndExclude);
-                        text.set_style(Style::FontSize(20.0),0..text.len(),EdgeBehavior::ExcludeAndExclude);
-                        let p=ParagraphWrapper::new(&text,0..text.len(),200.0);
-                        p.draw(canvas,0.0,100.0);*/
-
-                        canvas.restore();
-
-                        env.gr_context.flush_and_submit();
-                        env.gl_surface.swap_buffers(&env.gl_context).unwrap();
-                        app.redraw_done();
+                        app.request_redraw();
                     }
                     _ => {}
                 }
@@ -435,40 +437,133 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
             _ => {}
         }
 
-        {
-            let mut app = app.lock().unwrap();
-            if let Some(request_focus_path) = &app.request_focus_path {
-                if let Some(focused_item_path) = &app.focused_item_path {
-                    let focused_item = pages.current_page().unwrap().find_item_mut(focused_item_path).unwrap();
-                    if let Some(on_blur) = focused_item.get_on_blur() {
-                        on_blur();
-                    }
-                }
+        let pc = app.lock().unwrap().pointer_catch.clone();
+        if let Some(pc) = pc {
+            pointer_catch.push(pc);
+            app.lock().unwrap().pointer_catch = None;
+        }
 
-                let item = pages.current_page().unwrap().find_item_mut(request_focus_path).unwrap();
-                if let Some(on_focus) = item.get_on_focus() {
-                    on_focus();
-                }
-                app.focused_item_path = Some(request_focus_path.clone());
-                app.request_focus_path = None;
+        if let Some(request_focus_path) = &app.lock().unwrap().request_focus_id {
+            if let Some(focused_item_path) = &app.lock().unwrap().focused_item_id {
+                let focused_item = pages.current_page().unwrap().find_item_mut(*focused_item_path).unwrap();
+                // if let Some(on_blur) = focused_item.get_on_blur() {
+                //     on_blur();
+                // }
             }
 
-            if let Some(pc) = &app.pointer_catch {
-                pointer_catch.push(pc.clone());
-                app.pointer_catch = None;
+            let item = pages.current_page().unwrap().find_item_mut(*request_focus_path).unwrap();
+            // if let Some(on_focus) = item.get_on_focus() {
+            //     on_focus();
+            // }
+            app.lock().unwrap().focused_item_id = Some(request_focus_path.clone());
+            app.lock().unwrap().request_focus_id = None;
+        }
+
+
+
+        if app.lock().unwrap().need_rebuild {
+            let mut page_item = pages.current_page().unwrap();
+            let mut old_item = page_item.root_item_mut();
+            let item = page_item.page.build(app.clone());
+            page_item.page.on_create(app.clone());
+            page_item.root_item = Some(item);
+            app.rebuild_done();
+            app.request_layout();
+        }
+
+        if app.lock().unwrap().need_layout {
+            let (width, height): (f32, f32) = app.lock().unwrap().window().inner_size().into();
+            let scale_factor = app.scale_factor();
+            let width = width / scale_factor;
+            let height = height / scale_factor;
+            pages.iter_mut().for_each(|page_item| {
+                page_item.root_item_mut().measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                page_item.root_item_mut().layout(0.0, 0.0);
+            });
+            app.re_layout_done();
+            app.request_redraw();
+        }
+
+
+
+
+        if app.lock().unwrap().need_redraw {
+            let env = env.as_mut().unwrap();
+            let scale_factor = app.scale_factor();
+
+            let canvas = env.surface.canvas();
+
+            //canvas.clear(app.lock().unwrap().theme().get_color(ThemeColor::Background));
+            canvas.clear(Color::from_argb(0x80,0,0,0));
+            if let Some(wallpaper)=&wallpaper{
+                let app = app.lock().unwrap();
+                let window = app.window();
+                let window_client_position = window.inner_position();
+                if let Ok(window_client_position) = window_client_position {
+                    let x = - window_client_position.x as f32 / scale_factor;
+                    let y = - window_client_position.y as f32 / scale_factor;
+                    let mut paint = Paint::default();
+                    canvas.draw_image_rect(
+                        wallpaper,
+                        None,
+                        Rect::from_xywh(x, y, wallpaper.width() as f32, wallpaper.height() as f32),
+                        &paint,
+                    );
+                }
+            }
+
+
+            canvas.save();
+            // canvas.translate((app.lock().unwrap().window().inner_size().width as f32,0.0));
+            canvas.scale((scale_factor, scale_factor));
+
+            if let Some(page_item) = pages.current_page() {
+                page_item.root_item_mut().draw(canvas);
+            }
+
+            canvas.restore();
+
+            env.gr_context.flush_and_submit();
+            env.gl_surface.swap_buffers(&env.gl_context).unwrap();
+            app.redraw_done();
+        }
+
+        {
+            let mut animations = ANIMATIONS.lock().unwrap();
+            if !animations.is_empty() {
+                let item = pages.current_page().unwrap().root_item_mut();
+                let width = app.content_width();
+                let height = app.content_height();
+                for animation in animations.iter_mut() {
+                    if animation.is_running() {
+                        if animation.from.is_none() {
+                            animation.from = Some(Animation::item_to_layout_params(item));
+                            (animation.layout_transition.action)();
+                            item.measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                            item.layout(0.0, 0.0);
+                            app.lock().unwrap().need_layout = false;
+                            animation.to = Some(Animation::item_to_layout_params(item));
+                        }
+                        animation.update(item, Instant::now());
+                        elwt.set_control_flow(ControlFlow::Poll);
+                    }
+                }
+                animations.retain(|animation| animation.is_running());
+            }
+            else {
+                elwt.set_control_flow(ControlFlow::Wait);
             }
         }
 
-        elwt.set_control_flow(ControlFlow::Wait);
     }).unwrap();
 }
 
 #[cfg(not(target_os = "android"))]
-pub fn create_window(window_builder: WindowBuilder, launch_page: Box<dyn Page>) {
+pub fn create_window(window_builder: WindowBuilder, theme: Theme, launch_page: Box<dyn Page>) {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build().unwrap();
     event_loop.set_control_flow(ControlFlow::Wait);
 
-    let app = SharedApp::new(event_loop.create_proxy());
+    let app = SharedApp::new(event_loop.create_proxy(), theme);
     new_app(app.clone());
 
     run(app, event_loop, launch_page);
@@ -509,4 +604,24 @@ fn create_surface(
         None,
     )
         .expect("Could not create skia surface")
+}
+
+fn get_wallpaper() -> Option<Image> {
+    /*if let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Control Panel\Desktop")
+    {
+        let value: Result<String,_> = key.get_value("Wallpaper");
+        if let Ok(value) = value {
+            if let Ok(bytes) =fs::read(value){
+                let data = Data::new_copy(&bytes);
+                if let Some(image) = Image::from_encoded(data) {
+                    return Some(image);
+                }
+            }
+        }
+        None
+    } else {
+        None
+    }*/
+    None
 }

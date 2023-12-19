@@ -5,11 +5,17 @@ use lazy_static::lazy_static;
 use winit::window::Window;
 use std::thread::ThreadId;
 use winit::event_loop::EventLoopProxy;
+use crate::anim::Animation;
+use crate::app::Theme;
 use crate::item::{ItemPath, LayoutDirection, PointerType};
 
 lazy_static!(
+    pub(crate) static ref ANIMATIONS:Mutex<Vec<Animation>> = Mutex::new(Vec::new());
+);
+
+lazy_static!(
     pub(crate) static ref APPS:Mutex<LinkedList<(ThreadId, SharedApp)>> = Mutex::new(LinkedList::new());
-    );
+);
 
 pub(crate) fn current_app() -> Option<SharedApp> {
     let current_thread_id = std::thread::current().id();
@@ -29,32 +35,39 @@ pub(crate) fn new_app(app: SharedApp) {
 
 #[derive(Clone, Debug)]
 pub(crate) enum UserEvent {
+    Empty,
     TimerExpired(ItemPath,String)
 }
 
 pub struct App {
     window: Option<Window>,
-    need_redraw: bool,
+    theme: Theme,
+    pub(crate) need_redraw: bool,
+    pub(crate) need_layout: bool,
+    pub(crate) need_rebuild: bool,
     event_loop_proxy: EventLoopProxy<UserEvent>,
     layout_direction: LayoutDirection,
-    pub(crate) focused_item_path: Option<ItemPath>,
-    pub(crate) request_focus_path: Option<ItemPath>,
+    pub(crate) focused_item_id: Option<usize>,
+    pub(crate) request_focus_id: Option<usize>,
 
-    pub(crate) pointer_catch: Option<(PointerType, ItemPath)>,
+    pub(crate) pointer_catch: Option<(PointerType, usize)>,
 
     pub(crate) named_ids: HashMap<String, usize>,
     pub(crate) unnamed_id: usize,
 }
 
 impl App {
-    pub(crate) fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn new(event_loop_proxy: EventLoopProxy<UserEvent>, theme: Theme) -> Self {
         Self {
             window: None,
+            theme,
             need_redraw: false,
+            need_layout: false,
+            need_rebuild: false,
             event_loop_proxy,
             layout_direction: LayoutDirection::LeftToRight,
-            focused_item_path: None,
-            request_focus_path: None,
+            focused_item_id: None,
+            request_focus_id: None,
             pointer_catch: None,
             named_ids: HashMap::new(),
             unnamed_id: 0,
@@ -76,6 +89,14 @@ impl App {
         }
     }
 
+    pub fn theme(&self) -> &Theme {
+        &self.theme
+    }
+
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+    }
+
     pub(crate) fn set_window(&mut self, window: Window) {
         self.window = Some(window);
     }
@@ -85,10 +106,21 @@ impl App {
     }
 
     pub fn request_redraw(&mut self) {
-        if !self.need_redraw {
-            self.need_redraw = true;
-            self.window().request_redraw();
+        if !self.need_layout {
+            self.window.as_mut().unwrap().request_redraw();
         }
+        self.need_redraw = true;
+    }
+
+    pub fn request_layout(&mut self) {
+        self.need_layout = true;
+        if !self.need_redraw {
+            self.request_redraw();
+        }
+    }
+
+    pub fn request_rebuild(&mut self) {
+        self.need_rebuild = true;
     }
 
     pub fn activate_ime(&mut self){
@@ -99,16 +131,24 @@ impl App {
         self.window().set_ime_allowed(false);
     }
 
-    pub fn redraw_done(&mut self) {
+    pub(crate) fn redraw_done(&mut self) {
         self.need_redraw = false;
     }
 
-    pub fn request_focus(&mut self, path: &ItemPath) {
-        self.request_focus_path = Some(path.clone());
+    pub(crate) fn layout_done(&mut self) {
+        self.need_layout = false;
     }
 
-    pub fn catch_pointer(&mut self, pointer_type: PointerType, path: &ItemPath) {
-        self.pointer_catch = Some((pointer_type, path.clone()));
+    pub(crate) fn rebuild_done(&mut self) {
+        self.need_rebuild = false;
+    }
+
+    pub fn request_focus(&mut self, id: usize) {
+        self.request_focus_id = Some(id);
+    }
+
+    pub fn catch_pointer(&mut self, pointer_type: PointerType, id:usize) {
+        self.pointer_catch = Some((pointer_type, id));
     }
 
     pub fn window(&self) -> &Window {
@@ -145,9 +185,9 @@ pub struct SharedApp {
 }
 
 impl SharedApp {
-    pub(crate) fn new(event_loop_proxy: EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn new(event_loop_proxy: EventLoopProxy<UserEvent>, theme: Theme) -> Self {
         Self {
-            app: Arc::new(Mutex::new(App::new(event_loop_proxy)))
+            app: Arc::new(Mutex::new(App::new(event_loop_proxy,theme)))
         }
     }
 
@@ -180,6 +220,10 @@ impl SharedApp {
         self.app.lock().unwrap().id(name)
     }
 
+    pub fn set_theme(&self, theme: Theme) {
+        self.app.lock().unwrap().set_theme(theme);
+    }
+
     pub(crate) fn set_window(&self, window: Window) {
         self.app.lock().unwrap().set_window(window);
     }
@@ -188,16 +232,24 @@ impl SharedApp {
         self.app.lock().unwrap().send_event(event);
     }
 
-    pub fn request_focus(&self, path: &ItemPath) {
-        self.app.lock().unwrap().request_focus(path);
+    pub fn request_focus(&self, id: usize) {
+        self.app.lock().unwrap().request_focus(id);
     }
 
-    pub fn catch_pointer(&self, pointer_type: PointerType, path: &ItemPath) {
-        self.app.lock().unwrap().catch_pointer(pointer_type, path);
+    pub fn catch_pointer(&self, pointer_type: PointerType, id: usize) {
+        self.app.lock().unwrap().catch_pointer(pointer_type, id);
     }
 
     pub fn request_redraw(&self) {
         self.app.lock().unwrap().request_redraw();
+    }
+
+    pub fn request_layout(&self) {
+        self.app.lock().unwrap().request_layout();
+    }
+
+    pub fn request_rebuild(&self) {
+        self.app.lock().unwrap().request_rebuild();
     }
 
     pub fn activate_ime(&self) {
@@ -210,6 +262,14 @@ impl SharedApp {
 
     pub(crate) fn redraw_done(&self) {
         self.app.lock().unwrap().redraw_done();
+    }
+
+    pub(crate) fn re_layout_done(&self) {
+        self.app.lock().unwrap().layout_done();
+    }
+
+    pub(crate) fn rebuild_done(&self) {
+        self.app.lock().unwrap().rebuild_done();
     }
 
     pub fn content_width(&self) -> f32 {

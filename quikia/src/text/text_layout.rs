@@ -8,58 +8,6 @@ use skia_safe::{Canvas, Color, FontMgr, FontStyle, Paint, Point};
 use skia_safe::textlayout::{Decoration, FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextBox, TextDecoration, TextDirection, TextRange, TextStyle};
 use crate::text::{Style, StyledText};
 
-/*pub struct TextLayout {
-    paragraphs: Vec<ParagraphWrapper>,
-    layout_width: f32,
-    layout_height: f32,
-}
-
-impl TextLayout {
-    pub fn new(text: &StyledText, max_width: f32) -> Self {
-        let gc_segmenter = GraphemeClusterSegmenter::new();
-        let text_string = text.to_string();
-        let mut iter = gc_segmenter.segment_str(text_string.as_str());
-        let mut paragraphs = Vec::new();
-        let mut line_start = 0_usize;
-        let mut last_index = iter.next();
-
-        while let Some(index) = iter.next() {
-            let str = &text[last_index.unwrap()..index];
-            if str == "\r\n" || str == "\n" {
-                paragraphs.push(ParagraphWrapper::new(&text, line_start..index,line_start..last_index.unwrap(), max_width));
-                line_start = index;
-            }
-            last_index = Some(index);
-        }
-        let range = line_start..text.len();
-        paragraphs.push(ParagraphWrapper::new(&text, range.clone(),range, max_width));
-        let layout_width = paragraphs.iter().map(|paragraph| paragraph.layout_width()).fold(0.0, f32::max);
-        let layout_height = paragraphs.iter().map(|paragraph| paragraph.layout_height()).fold(0.0, Add::add);
-
-        TextLayout {
-            paragraphs,
-            layout_width,
-            layout_height,
-        }
-    }
-
-    pub fn layout_width(&self) -> f32 {
-        self.layout_width
-    }
-
-    pub fn layout_height(&self) -> f32 {
-        self.layout_height
-    }
-
-    pub fn draw(&self, canvas: &Canvas, x: f32, y: f32) {
-        let mut y = y;
-        self.paragraphs.iter().for_each(|paragraph| {
-            paragraph.paragraph.paint(canvas, (x, y));
-            y += paragraph.layout_height();
-        });
-    }
-}
-*/
 pub struct ParagraphWrapper {
     //text:String,
     paragraph: Paragraph,
@@ -175,7 +123,7 @@ impl ParagraphWrapper {
     }
 
     pub fn layout_width(&self) -> f32 {
-        self.paragraph.max_width()
+        self.paragraph.max_intrinsic_width()
     }
 
     pub fn layout_height(&self) -> f32 {
@@ -248,6 +196,14 @@ impl ParagraphWrapper {
         }
     }
 
+    pub fn utf16_index_to_byte_index(&self, utf16_index: usize) -> usize {
+        if let Some(byte_index) = self.utf16_to_byte_indices.get(&utf16_index) {
+            *byte_index
+        } else {
+            panic!("the index of {} is not a grapheme cluster boundary", utf16_index);
+        }
+    }
+
     pub fn get_closest_glyph_cluster_at(&self, point: impl Into<Point>) -> usize {
         let point = point.into();
         let point_clone = point.clone();
@@ -287,6 +243,14 @@ impl ParagraphWrapper {
 
     pub fn byte_length(&self) -> usize {
         self.byte_length
+    }
+
+    pub fn inner_paragraph(&self) -> &Paragraph {
+        &self.paragraph
+    }
+
+    pub fn inner_paragraph_mut(&mut self) -> &mut Paragraph {
+        &mut self.paragraph
     }
 }
 

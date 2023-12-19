@@ -22,21 +22,21 @@ impl From<Item> for ItemProperty{
 
 impl From<Rectangle> for ItemProperty{
     fn from(rectangle: Rectangle) -> Self {
-        let item = rectangle.into();
+        let item = rectangle.unwrap();
         Self::from(Some(item))
     }
 }
 
 impl From<u32> for ItemProperty{
     fn from(color: u32) -> Self {
-        let item = Rectangle::new().color(color).into();
+        let item = Rectangle::new().color(color).unwrap();
         Self::from(Some(item))
     }
 }
 
 impl From<Color> for ItemProperty{
     fn from(color: Color) -> Self {
-        let item = Rectangle::new().color(color).into();
+        let item = Rectangle::new().color(color).unwrap();
         Self::from(Some(item))
     }
 }
@@ -44,7 +44,7 @@ impl From<Color> for ItemProperty{
 impl From<ColorProperty> for ItemProperty{
     fn from(color: ColorProperty) -> Self {
         let color_property = color.clone();
-        let item =Rectangle::new().color(color.get()).into();
+        let item =Rectangle::new().color(color.get()).unwrap();
         let item_property = Self::from(Some(item));
         item_property.observe(&color_property);
         item_property

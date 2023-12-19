@@ -59,6 +59,7 @@ impl From<&FloatProperty> for FloatProperty{
     }
 }
 
+
 impl From<i32> for FloatProperty{
     fn from(value: i32) -> Self {
         Self::from_i32(value)

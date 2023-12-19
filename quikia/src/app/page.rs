@@ -1,11 +1,8 @@
 use std::collections::linked_list::{Iter, IterMut};
-use std::collections::{HashMap, LinkedList};
-use std::sync::Mutex;
+use std::collections::LinkedList;
 use crate::app::SharedApp;
 use crate::item::{Item, ItemPath};
-//use crate::stack;
 
-pub type ItemMap = HashMap<usize, Item>;
 
 pub trait Page {
     fn build(&mut self, app: SharedApp) -> Item;
@@ -19,18 +16,46 @@ pub struct PageItem {
 }
 
 impl PageItem {
-    pub fn find_item(&self, path: &ItemPath) -> Option<&Item> {
-        if self.root_item.is_none() {
+    pub fn find_item(&self, id: usize) -> Option<&Item> {
+        if let Some(root_item) = &self.root_item {
+            if root_item.get_id() == id {
+                return Some(root_item);
+            }
+
+            let mut stack = LinkedList::new();
+            stack.push_back(root_item);
+
+            while let Some(item) = stack.pop_back() {
+                if item.get_id() == id {
+                    return Some(item);
+                }
+                stack.extend(item.get_children().iter());
+            }
+
             return None;
         }
-        self.root_item.as_ref().unwrap().find_item(path)
+        None
     }
 
-    pub fn find_item_mut(&mut self, path: &ItemPath) -> Option<&mut Item> {
-        if self.root_item.is_none() {
+    pub fn find_item_mut(&mut self, id: usize) -> Option<&mut Item> {
+        if let Some(root_item) = &mut self.root_item {
+            if root_item.get_id() == id {
+                return Some(root_item);
+            }
+
+            let mut stack = LinkedList::new();
+            stack.push_back(root_item);
+
+            while let Some(item) = stack.pop_back() {
+                if item.get_id() == id {
+                    return Some(item);
+                }
+                stack.extend(item.get_children_mut().iter_mut());
+            }
+
             return None;
         }
-        self.root_item.as_mut().unwrap().find_item_mut(path)
+        None
     }
 
     pub fn root_item(&self) -> &Item {
@@ -61,12 +86,12 @@ impl PageStack {
     }
 
     // pub fn launch(&mut self, mut page: Box<dyn Page>, app: SharedApp) {
-    //     let item = page.build(app.clone());
+    //     let old_item = page.build(app.clone());
     //
     //     page.on_create(app.clone());
     //     self.pages.push_back(PageItem {
     //         page,
-    //         root_item: item,
+    //         root_item: old_item,
     //     });
     // }
 

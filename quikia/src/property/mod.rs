@@ -5,6 +5,7 @@ mod bool_property;
 mod item_property;
 mod alignment_property;
 mod text_property;
+mod gravity_property;
 
 use std::ops::{Deref, DerefMut};
 use std::process::id;
@@ -15,6 +16,7 @@ pub use bool_property::*;
 pub use item_property::*;
 pub use alignment_property::*;
 pub use text_property::*;
+pub use gravity_property::*;
 
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
@@ -170,6 +172,7 @@ pub struct SharedProperty<T> {
 }
 
 impl<T: 'static> SharedProperty<T> {
+
     pub fn from_value(value: T) -> Self {
         Self {
             value: Arc::new(Mutex::new(Property::from_value(value))),
