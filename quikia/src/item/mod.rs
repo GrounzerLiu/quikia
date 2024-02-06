@@ -23,29 +23,29 @@ use std::ops::{Add, Deref, DerefMut};
 pub fn measure_child(child: &Item, parent_layout_params: &LayoutParams, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) -> (MeasureMode, MeasureMode) {
     let layout_params = child.get_layout_params();
     let max_width = match width_measure_mode {
-        MeasureMode::Exactly(width) => width,
-        MeasureMode::AtMost(width) => width,
+        MeasureMode::Specified(width) => width,
+        MeasureMode::Unspecified(width) => width,
     } - layout_params.margin_start - layout_params.margin_end - parent_layout_params.padding_start - parent_layout_params.margin_end;
     let max_height = match height_measure_mode {
-        MeasureMode::Exactly(height) => height,
-        MeasureMode::AtMost(height) => height,
+        MeasureMode::Specified(height) => height,
+        MeasureMode::Unspecified(height) => height,
     } - layout_params.margin_top - layout_params.margin_bottom - parent_layout_params.padding_top - parent_layout_params.margin_bottom;
 
     let child_width = child.get_width().get();
     let child_height = child.get_height().get();
 
     let child_width_measure_mode = match child_width {
-        Size::Default => MeasureMode::AtMost(max_width),
-        Size::Fill => MeasureMode::Exactly(max_width),
-        Size::Fixed(width) => MeasureMode::Exactly(width),
-        Size::Relative(scale) => MeasureMode::Exactly(max_width * scale),
+        Size::Default => MeasureMode::Unspecified(max_width),
+        Size::Fill => MeasureMode::Specified(max_width),
+        Size::Fixed(width) => MeasureMode::Specified(width),
+        Size::Relative(scale) => MeasureMode::Specified(max_width * scale),
     };
 
     let child_height_measure_mode = match child_height {
-        Size::Default => MeasureMode::AtMost(max_height),
-        Size::Fill => MeasureMode::Exactly(max_height),
-        Size::Fixed(height) => MeasureMode::Exactly(height),
-        Size::Relative(percent) => MeasureMode::Exactly(max_height * percent),
+        Size::Default => MeasureMode::Unspecified(max_height),
+        Size::Fill => MeasureMode::Specified(max_height),
+        Size::Fixed(height) => MeasureMode::Specified(height),
+        Size::Relative(percent) => MeasureMode::Specified(max_height * percent),
     };
 
     (child_width_measure_mode, child_height_measure_mode)
@@ -60,10 +60,10 @@ pub enum Gravity {
 
 #[derive(Clone, Copy, Debug)]
 pub enum MeasureMode {
-    /// The parent has determined an exact size for the child.
-    Exactly(f32),
-    /// The child can be as large as it wants up to the specified size.
-    AtMost(f32),
+    /// Indicates that the parent has determined an exact size for the child.
+    Specified(f32),
+    /// Indicates that the child can determine its own size. The value of this enum is the maximum size the child can use.
+    Unspecified(f32),
 }
 
 #[derive(Clone, Debug, PartialEq)]

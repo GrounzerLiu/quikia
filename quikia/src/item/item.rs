@@ -249,3 +249,10 @@ impl Item {
     }
 }
 
+impl Into<(GravityProperty,GravityProperty)> for &SharedProperty<Gravity> {
+    fn into(self) -> (GravityProperty, GravityProperty) {
+        let horizontal_gravity = self.clone();
+        let vertical_gravity = self.clone();
+        (horizontal_gravity.into(), vertical_gravity.into())
+    }
+}

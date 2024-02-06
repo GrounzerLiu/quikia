@@ -79,19 +79,19 @@ impl Default for ItemEvent {
                     layout_params.init_from_item(item);
 
                     match width_measure_mode {
-                        MeasureMode::Exactly(width) => {
+                        MeasureMode::Specified(width) => {
                             layout_params.width = width + layout_params.padding_start + layout_params.padding_end;
                         }
-                        MeasureMode::AtMost(_) => {
+                        MeasureMode::Unspecified(_) => {
                             layout_params.width = layout_params.padding_start + layout_params.padding_end;
                         }
                     }
                     layout_params.width = layout_params.width.max(item.get_min_width().get()).min(item.get_max_width().get());
                     match height_measure_mode {
-                        MeasureMode::Exactly(height) => {
+                        MeasureMode::Specified(height) => {
                             layout_params.height = height + layout_params.padding_top + layout_params.padding_bottom;
                         }
-                        MeasureMode::AtMost(_) => {
+                        MeasureMode::Unspecified(_) => {
                             layout_params.height = layout_params.padding_top + layout_params.padding_bottom;
                         }
                     }
@@ -100,15 +100,15 @@ impl Default for ItemEvent {
 
                     if let Some(background) = item.get_background().lock().as_mut() {
                         background.measure(
-                            MeasureMode::Exactly(layout_params.width),
-                            MeasureMode::Exactly(layout_params.height),
+                            MeasureMode::Specified(layout_params.width),
+                            MeasureMode::Specified(layout_params.height),
                         );
                     }
 
                     if let Some(foreground) = item.get_foreground().lock().as_mut() {
                         foreground.measure(
-                            MeasureMode::Exactly(layout_params.width),
-                            MeasureMode::Exactly(layout_params.height),
+                            MeasureMode::Specified(layout_params.width),
+                            MeasureMode::Specified(layout_params.height),
                         );
                     }
 

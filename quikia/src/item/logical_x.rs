@@ -1,6 +1,10 @@
 use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 use crate::item::LayoutDirection;
 
+/// LogicalX is a type that represents a logical x value in a layout.
+/// It can be used to represent the x value of an item in a layout.
+/// If the layout direction is left to right, the logical x value is the distance from the start of the layout to the left edge of the item.
+/// If the layout direction is right to left, the logical x value is the distance from the start of the layout to the right edge of the item.
 #[derive(Clone, Copy, Debug)]
 pub struct LogicalX {
     direction: LayoutDirection,
@@ -10,6 +14,7 @@ pub struct LogicalX {
 }
 
 impl LogicalX {
+    /// Create a new LogicalX with the given direction, start_x, logical_x, and width.
     pub fn new(direction: LayoutDirection, start_x: f32, logical_x: f32, width: f32) -> Self {
         Self {
             direction,
@@ -23,6 +28,7 @@ impl LogicalX {
         self.direction
     }
 
+    /// Get the logical x value as a physical x value.
     pub fn physical_value(&self, width: f32) -> f32 {
         match self.direction {
             LayoutDirection::LeftToRight => self.logical_x,
@@ -30,6 +36,7 @@ impl LogicalX {
         }
     }
 
+    /// Get the logical x value as a logical value.
     pub fn logical_value(&self) -> f32 {
         self.logical_x
     }

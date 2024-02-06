@@ -24,14 +24,14 @@ impl Stack {
                         let mut height = 0.0_f32;
 
                         let mut remaining_width = match width_measure_mode {
-                            MeasureMode::Exactly(width) => width,
-                            MeasureMode::AtMost(width) => width,
+                            MeasureMode::Specified(width) => width,
+                            MeasureMode::Unspecified(width) => width,
                         };
 
                         item.get_children_mut().iter_mut().for_each(|child| {
                             let width_measure_mode = match width_measure_mode {
-                                MeasureMode::Exactly(_) => MeasureMode::Exactly(remaining_width),
-                                MeasureMode::AtMost(_) => MeasureMode::AtMost(remaining_width),
+                                MeasureMode::Specified(_) => MeasureMode::Specified(remaining_width),
+                                MeasureMode::Unspecified(_) => MeasureMode::Unspecified(remaining_width),
                             };
 
                             let mut child_occupied_width = 0.0;
@@ -63,19 +63,19 @@ impl Stack {
                         });
 
                         match width_measure_mode {
-                            MeasureMode::Exactly(measured_width) => {
+                            MeasureMode::Specified(measured_width) => {
                                 layout_params.width = measured_width;
                             }
-                            MeasureMode::AtMost(measured_width) => {
+                            MeasureMode::Unspecified(measured_width) => {
                                 layout_params.width = measured_width.min(width);
                             }
                         }
 
                         match height_measure_mode {
-                            MeasureMode::Exactly(measured_height) => {
+                            MeasureMode::Specified(measured_height) => {
                                 layout_params.height = measured_height;
                             }
-                            MeasureMode::AtMost(measured_height) => {
+                            MeasureMode::Unspecified(measured_height) => {
                                 layout_params.height = measured_height.min(height);
                             }
                         }

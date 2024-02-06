@@ -61,43 +61,47 @@ impl Rectangle {
                         let rect = Rect::from_xywh(x, y, width, height);
 
                         let properties = properties.lock().unwrap();
+                        let use_smooth_corners = properties.use_smooth_corners.get();
 
                         let color = *layout_params.get_color_param("color").unwrap_or(&(properties.color.get()));
-                        let use_smooth_corners = properties.use_smooth_corners.get();
+                        let radius_start_top = *layout_params.get_float_param("radius_start_top").unwrap_or(&(properties.radius_start_top.get()));
+                        let radius_end_top = *layout_params.get_float_param("radius_end_top").unwrap_or(&(properties.radius_end_top.get()));
+                        let radius_start_bottom = *layout_params.get_float_param("radius_start_bottom").unwrap_or(&(properties.radius_start_bottom.get()));
+                        let radius_end_bottom = *layout_params.get_float_param("radius_end_bottom").unwrap_or(&(properties.radius_end_bottom.get()));
 
                         let radius_left_top = match layout_direction {
                             LayoutDirection::LeftToRight => {
-                                properties.radius_start_top.get()
+                                radius_start_top
                             }
                             LayoutDirection::RightToLeft => {
-                                properties.radius_end_top.get()
+                                radius_end_top
                             }
                         };
 
                         let radius_right_top = match layout_direction {
                             LayoutDirection::LeftToRight => {
-                                properties.radius_end_top.get()
+                                radius_end_top
                             }
                             LayoutDirection::RightToLeft => {
-                                properties.radius_start_top.get()
+                                radius_start_top
                             }
                         };
 
                         let radius_right_bottom = match layout_direction {
                             LayoutDirection::LeftToRight => {
-                                properties.radius_end_bottom.get()
+                                radius_end_bottom
                             }
                             LayoutDirection::RightToLeft => {
-                                properties.radius_start_bottom.get()
+                                radius_start_bottom
                             }
                         };
 
                         let radius_left_bottom = match layout_direction {
                             LayoutDirection::LeftToRight => {
-                                properties.radius_start_bottom.get()
+                                radius_start_bottom
                             }
                             LayoutDirection::RightToLeft => {
-                                properties.radius_end_bottom.get()
+                                radius_end_bottom
                             }
                         };
 
@@ -116,21 +120,25 @@ impl Rectangle {
                         layout_params.init_from_item(item);
 
                         layout_params.set_color_param("color", properties.lock().unwrap().color.get());
+                        layout_params.set_float_param("radius_start_top", properties.lock().unwrap().radius_start_top.get());
+                        layout_params.set_float_param("radius_end_top", properties.lock().unwrap().radius_end_top.get());
+                        layout_params.set_float_param("radius_start_bottom", properties.lock().unwrap().radius_start_bottom.get());
+                        layout_params.set_float_param("radius_end_bottom", properties.lock().unwrap().radius_end_bottom.get());
 
                         match width_measure_mode {
-                            MeasureMode::Exactly(width) => {
+                            MeasureMode::Specified(width) => {
                                 layout_params.width = width + layout_params.padding_start + layout_params.padding_end;
                             }
-                            MeasureMode::AtMost(_) => {
+                            MeasureMode::Unspecified(_) => {
                                 layout_params.width = layout_params.padding_start + layout_params.padding_end;
                             }
                         }
                         layout_params.width = layout_params.width.max(item.get_min_width().get()).min(item.get_max_width().get());
                         match height_measure_mode {
-                            MeasureMode::Exactly(height) => {
+                            MeasureMode::Specified(height) => {
                                 layout_params.height = height + layout_params.padding_top + layout_params.padding_bottom;
                             }
-                            MeasureMode::AtMost(_) => {
+                            MeasureMode::Unspecified(_) => {
                                 layout_params.height = layout_params.padding_top + layout_params.padding_bottom;
                             }
                         }
@@ -139,15 +147,15 @@ impl Rectangle {
 
                         if let Some(background) = item.get_background().lock().as_mut() {
                             background.measure(
-                                MeasureMode::Exactly(layout_params.width),
-                                MeasureMode::Exactly(layout_params.height),
+                                MeasureMode::Specified(layout_params.width),
+                                MeasureMode::Specified(layout_params.height),
                             );
                         }
 
                         if let Some(foreground) = item.get_foreground().lock().as_mut() {
                             foreground.measure(
-                                MeasureMode::Exactly(layout_params.width),
-                                MeasureMode::Exactly(layout_params.height),
+                                MeasureMode::Specified(layout_params.width),
+                                MeasureMode::Specified(layout_params.height),
                             );
                         }
 
@@ -183,7 +191,7 @@ impl Rectangle {
         color.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw();
+                    app.request_layout();
                 }
             )
         );
@@ -197,7 +205,7 @@ impl Rectangle {
         radius.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw();
+                    app.request_layout();
                 }
             )
         );
@@ -211,7 +219,7 @@ impl Rectangle {
         radius.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw()
+                    app.request_layout()
                 }
             )
         );
@@ -225,7 +233,7 @@ impl Rectangle {
         radius.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw();
+                    app.request_layout();
                 }
             )
         );
@@ -239,7 +247,7 @@ impl Rectangle {
         radius.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw();
+                    app.request_layout();
                 }
             )
         );
@@ -253,7 +261,7 @@ impl Rectangle {
         radius.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw();
+                    app.request_layout();
                 }
             )
         );
@@ -272,7 +280,7 @@ impl Rectangle {
         use_smooth_corners.add_observer(
             Observer::new_without_id(
                 move || {
-                    app.request_redraw();
+                    app.request_layout();
                 }
             )
         );

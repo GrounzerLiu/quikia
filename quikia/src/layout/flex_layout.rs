@@ -62,8 +62,8 @@ impl Default for FlexLayoutProperties {
     fn default() -> Self {
         FlexLayoutProperties {
             axis_start: SharedProperty::from_value(AxisStart::StartTop),
-            flex_wrap: SharedProperty::from_value(FlexWrap::Wrap),
-            justify_content: SharedProperty::from_value(FlexAlign::Start),
+            flex_wrap: SharedProperty::from_value(FlexWrap::NoWrap),
+            justify_content: SharedProperty::from_value(FlexAlign::End),
             align_items: SharedProperty::from_value(ItemAlign::Start),
             align_content: SharedProperty::from_value(FlexAlign::Start),
             children_occupied_space: LogicalSize::new(0.0, 0.0),
@@ -78,13 +78,16 @@ pub struct FlexLayout {
 
 impl FlexLayout {
     pub fn new(children: Vec<Item>) -> Self {
+
         let properties = Arc::new(Mutex::new(FlexLayoutProperties::default()));
+
         let mut item = Item::new(
             ItemEvent::default()
-                .set_on_measure({
+                .set_on_measure({// Measure the layout, get the expected width and height of the layout and its children
                     let properties = properties.clone();
                     move |item, width_measure_mode, height_measure_mode| {
                         let mut properties = properties.lock().unwrap();
+
                         properties.children_occupied_space = LogicalSize::new(0.0, 0.0);
 
                         let mut layout_params = item.get_layout_params().clone();
@@ -105,9 +108,10 @@ impl FlexLayout {
                         let align_content = properties.align_content.get();
 
                         match width_measure_mode {
-                            MeasureMode::Exactly(width) => {
+                            MeasureMode::Specified(width) => {
                                 match height_measure_mode {
-                                    MeasureMode::Exactly(height) => {
+                                    MeasureMode::Specified(height) => {
+
                                         measure_width = width.clamp(min_width, max_width);
                                         measure_height = height.clamp(min_height, max_height);
 
@@ -115,6 +119,7 @@ impl FlexLayout {
                                             match flex_wrap {
                                                 FlexWrap::NoWrap => {
                                                     match axis_start {
+                                                        // Main axis is horizontal
                                                         AxisStart::StartTop |
                                                         AxisStart::EndTop |
                                                         AxisStart::StartBottom |
@@ -131,6 +136,7 @@ impl FlexLayout {
                                                             properties.children_occupied_space.width += child.get_layout_params().width + child.get_layout_params().margin_start + child.get_layout_params().margin_end;
                                                             properties.children_occupied_space.height = properties.children_occupied_space.height.max(child.get_layout_params().height + child.get_layout_params().margin_top + child.get_layout_params().margin_bottom);
                                                         }
+                                                        // Main axis is vertical
                                                         AxisStart::TopStart |
                                                         AxisStart::TopEnd |
                                                         AxisStart::BottomStart |
@@ -156,7 +162,7 @@ impl FlexLayout {
                                             }
                                         });
                                     }
-                                    MeasureMode::AtMost(height) => {
+                                    MeasureMode::Unspecified(height) => {
                                         measure_width = width.clamp(min_width, max_width);
                                         item.get_children_mut().iter_mut().for_each(|child| {
                                             match flex_wrap {
@@ -203,9 +209,9 @@ impl FlexLayout {
                                     }
                                 }
                             }
-                            MeasureMode::AtMost(width) => {
+                            MeasureMode::Unspecified(width) => {
                                 match height_measure_mode {
-                                    MeasureMode::Exactly(height) => {
+                                    MeasureMode::Specified(height) => {
                                         measure_height = height.clamp(min_height, max_height);
                                         item.get_children_mut().iter_mut().for_each(|child| {
                                             match flex_wrap {
@@ -231,7 +237,7 @@ impl FlexLayout {
                                             }
                                         });
                                     }
-                                    MeasureMode::AtMost(height) => {
+                                    MeasureMode::Unspecified(height) => {
                                         item.get_children_mut().iter_mut().for_each(|child| {
                                             match flex_wrap {
                                                 FlexWrap::NoWrap => {
@@ -265,11 +271,11 @@ impl FlexLayout {
                         layout_params.height = measure_height;
 
                         if let Some(background) = item.get_background().lock().as_mut() {
-                            background.measure(MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
+                            background.measure(MeasureMode::Specified(layout_params.width), MeasureMode::Specified(layout_params.height));
                         }
 
                         if let Some(foreground) = item.get_foreground().lock().as_mut() {
-                            foreground.measure(MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
+                            foreground.measure(MeasureMode::Specified(layout_params.width), MeasureMode::Specified(layout_params.height));
                         }
 
                         item.set_layout_params(&layout_params);
@@ -388,6 +394,7 @@ impl FlexLayout {
                                             }
                                             FlexAlign::End => {
                                                 let mut child_x = x + width - properties.children_occupied_space.width - layout_params.padding_end;
+
                                                 item.get_children_mut().iter_mut().for_each(|child| {
                                                     let mut child_layout_params = child.get_layout_params().clone();
                                                     let x = child_x + child_layout_params.margin_start;
@@ -747,12 +754,12 @@ impl FlexLayout {
 fn measure_child_stretch(is_height: bool, child: &Item, parent_layout_params: &LayoutParams, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) -> (MeasureMode, MeasureMode) {
     let layout_params = child.get_layout_params();
     let max_width = match width_measure_mode {
-        MeasureMode::Exactly(width) => width,
-        MeasureMode::AtMost(width) => width,
+        MeasureMode::Specified(width) => width,
+        MeasureMode::Unspecified(width) => width,
     } - layout_params.margin_start - layout_params.margin_end - parent_layout_params.padding_start - parent_layout_params.margin_end;
     let max_height = match height_measure_mode {
-        MeasureMode::Exactly(height) => height,
-        MeasureMode::AtMost(height) => height,
+        MeasureMode::Specified(height) => height,
+        MeasureMode::Unspecified(height) => height,
     } - layout_params.margin_top - layout_params.margin_bottom - parent_layout_params.padding_top - parent_layout_params.margin_bottom;
 
     let child_width = child.get_width().get();
@@ -761,24 +768,24 @@ fn measure_child_stretch(is_height: bool, child: &Item, parent_layout_params: &L
     let child_width_measure_mode =
         if is_height {
             match child_width {
-                Size::Default => MeasureMode::AtMost(max_width),
-                Size::Fill => MeasureMode::Exactly(max_width),
-                Size::Fixed(width) => MeasureMode::Exactly(width),
-                Size::Relative(scale) => MeasureMode::Exactly(max_width * scale),
+                Size::Default => MeasureMode::Unspecified(max_width),
+                Size::Fill => MeasureMode::Specified(max_width),
+                Size::Fixed(width) => MeasureMode::Specified(width),
+                Size::Relative(scale) => MeasureMode::Specified(max_width * scale),
             }
         } else {
-            MeasureMode::Exactly(max_width)
+            MeasureMode::Specified(max_width)
         };
 
     let child_height_measure_mode =
         if is_height {
-            MeasureMode::Exactly(max_height)
+            MeasureMode::Specified(max_height)
         } else {
             match child_height {
-                Size::Default => MeasureMode::AtMost(max_height),
-                Size::Fill => MeasureMode::Exactly(max_height),
-                Size::Fixed(height) => MeasureMode::Exactly(height),
-                Size::Relative(scale) => MeasureMode::Exactly(max_height * scale),
+                Size::Default => MeasureMode::Unspecified(max_height),
+                Size::Fill => MeasureMode::Specified(max_height),
+                Size::Fixed(height) => MeasureMode::Specified(height),
+                Size::Relative(scale) => MeasureMode::Specified(max_height * scale),
             }
         };
 

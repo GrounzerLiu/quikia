@@ -15,7 +15,7 @@ fn main() {
     let window_builder = WindowBuilder::new()
         .with_title("Hello, world!")
         .with_inner_size(Size::Logical(LogicalSize::new(800.0, 600.0)));
-    create_window(window_builder,material_theme(Color::GREEN, false), Box::new(MainPage::new()));
+    create_window(window_builder,material_theme(Color::GREEN, true), Box::new(MainPage::new()));
 }
 
 /*#[cfg(target_os = "android")]

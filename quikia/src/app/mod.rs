@@ -11,8 +11,8 @@ pub use app::*;
 pub use page::*;
 pub use window::*;
 pub use theme::*;
-use winapi::shared::windef::HWND;
-use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
+// use winapi::shared::windef::HWND;
+// use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
 
 pub struct Timer {
     inner: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
@@ -64,7 +64,7 @@ impl Timer {
         }
     }
 }
-
+/*
 #[repr(C)]
 pub enum WindowCompositionAttrib {
     Undefined = 0,
@@ -186,4 +186,4 @@ pub fn set_transparent(hwnd: *mut c_void){
     unsafe {
         func(hwnd, &mut data as *mut _);
     }
-}
+}*/

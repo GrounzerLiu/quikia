@@ -1,5 +1,5 @@
 
-use winapi::shared::windef::HWND__;
+// use winapi::shared::windef::HWND__;
 use std::{ffi::CString, fs, num::NonZeroU32};
 use std::time::Instant;
 use gl::types::*;
@@ -27,7 +27,7 @@ use skia_safe::canvas::SaveLayerRec;
 use skia_safe::image_filters::{blur, CropRect};
 use skia_safe::svg::{Canvas, Dom};
 use skia_safe::wrapper::PointerWrapper;
-use winapi::shared::minwindef::TRUE;
+// use winapi::shared::minwindef::TRUE;
 use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{ElementState, Ime, Touch, TouchPhase};
 use winit::event_loop::{EventLoopBuilder, EventLoopWindowTarget};
@@ -37,11 +37,11 @@ use winit::platform::android::activity::AndroidApp;
 use winit::platform::android::EventLoopBuilderExtAndroid;
 
 use crate::anim::Animation;
-use crate::app::{ANIMATIONS, new_app, Page, PageStack, set_acrylic, set_areo, SharedApp, Theme, ThemeColor, UserEvent};
+use crate::app::{ANIMATIONS, new_app, Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
 use crate::item::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
 //use crate::old_item::{ButtonState, ImeAction, ItemPath, KeyboardInput, MeasureMode, PointerType};
 
-use winapi::um::dwmapi::{DWM_BB_ENABLE, DWM_BLURBEHIND, DwmEnableBlurBehindWindow};
+// use winapi::um::dwmapi::{DWM_BB_ENABLE, DWM_BLURBEHIND, DwmEnableBlurBehindWindow};
 
 struct Env {
     surface: Surface,
@@ -180,20 +180,20 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
         if let Event::Resumed = event {
             let (inited_env, window) = init_env(elwt);
 
-            match window.raw_window_handle() {
-                RawWindowHandle::Win32(handle) => {
-                    //set_acrylic(handle.hwnd)
-                    /*let d=DWM_BLURBEHIND{
-                        dwFlags: DWM_BB_ENABLE,
-                        fEnable: TRUE,
-                        hRgnBlur: std::ptr::null_mut(),
-                        fTransitionOnMaximized: TRUE,
-                    };
-                    unsafe { DwmEnableBlurBehindWindow(handle.hwnd as *mut HWND__, std::ptr::addr_of!(d)); }
-                    winapi::um::winuser::SetWindowCom*/
-                }
-                _=>{}
-            }
+            // match window.raw_window_handle() {
+            //     RawWindowHandle::Win32(handle) => {
+            //         //set_acrylic(handle.hwnd)
+            //         /*let d=DWM_BLURBEHIND{
+            //             dwFlags: DWM_BB_ENABLE,
+            //             fEnable: TRUE,
+            //             hRgnBlur: std::ptr::null_mut(),
+            //             fTransitionOnMaximized: TRUE,
+            //         };
+            //         unsafe { DwmEnableBlurBehindWindow(handle.hwnd as *mut HWND__, std::ptr::addr_of!(d)); }
+            //         winapi::um::winuser::SetWindowCom*/
+            //     }
+            //     _=>{}
+            // }
 
             env = Some(inited_env);
             app.set_window(window);
@@ -249,7 +249,7 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                         let width = width as f32 / app.scale_factor();
                         let height = height as f32 / app.scale_factor();
                         pages.iter_mut().for_each(|page_item| {
-                            page_item.root_item_mut().measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                            page_item.root_item_mut().measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
                             page_item.root_item_mut().layout(0.0, 0.0);
                         })
                     }
@@ -477,7 +477,7 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
             let width = width / scale_factor;
             let height = height / scale_factor;
             pages.iter_mut().for_each(|page_item| {
-                page_item.root_item_mut().measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                page_item.root_item_mut().measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
                 page_item.root_item_mut().layout(0.0, 0.0);
             });
             app.re_layout_done();
@@ -493,8 +493,8 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
 
             let canvas = env.surface.canvas();
 
-            //canvas.clear(app.lock().unwrap().theme().get_color(ThemeColor::Background));
-            canvas.clear(Color::from_argb(0x80,0,0,0));
+            canvas.clear(app.lock().unwrap().theme().get_color(ThemeColor::Background));
+            //canvas.clear(Color::from_argb(0x80,0,0,0));
             if let Some(wallpaper)=&wallpaper{
                 let app = app.lock().unwrap();
                 let window = app.window();
@@ -539,7 +539,7 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                         if animation.from.is_none() {
                             animation.from = Some(Animation::item_to_layout_params(item));
                             (animation.layout_transition.action)();
-                            item.measure(MeasureMode::Exactly(width), MeasureMode::Exactly(height));
+                            item.measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
                             item.layout(0.0, 0.0);
                             app.lock().unwrap().need_layout = false;
                             animation.to = Some(Animation::item_to_layout_params(item));
