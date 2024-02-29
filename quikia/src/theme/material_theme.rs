@@ -47,7 +47,7 @@ pub fn material_theme(color: Color, is_dark: bool) -> Theme {
     let argb=argb_to_u32(a, r, g, b);
     let scheme_ops = material_color_utilities::scheme::scheme_tonal_spot(Hct::from_argb(argb), is_dark);
     let scheme = DynamicScheme::new(scheme_ops);
-    Theme::new()
+    Theme::new(is_dark)
         .set_color(ThemeColor::Primary, material_dynamic_colors::primary().get_argb(&scheme).into())
         .set_color(ThemeColor::OnPrimary, material_dynamic_colors::on_primary().get_argb(&scheme).into())
         .set_color(ThemeColor::PrimaryContainer, material_dynamic_colors::primary_container().get_argb(&scheme).into())

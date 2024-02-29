@@ -6,6 +6,7 @@ const HUES: [f64; 9] = [0.0, 21.0, 51.0, 121.0, 151.0, 191.0, 271.0, 321.0, 360.
 
 const SECONDARY_ROTATIONS: [f64; 9] = [45.0, 95.0, 45.0, 20.0, 45.0, 90.0, 45.0, 45.0, 45.0];
 
+#[allow(dead_code)]
 const TERTIARY_ROTATIONS: [f64; 9] = [120.0, 120.0, 20.0, 45.0, 20.0, 15.0, 20.0, 120.0, 120.0];
 
 pub fn scheme_expressive(source_color_hct: Hct, is_dark: bool) -> DynamicSchemeOptions {

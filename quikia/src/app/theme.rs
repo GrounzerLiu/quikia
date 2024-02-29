@@ -47,15 +47,21 @@ pub struct Theme{
     colors: HashMap<ThemeColor, Color>,
     dimensions: HashMap<ThemeDimension, f32>,
     bools: HashMap<ThemeBool, bool>,
+    is_dark: bool,
 }
 
 impl Theme{
-    pub fn new() -> Self{
+    pub fn new(is_dark:bool) -> Self{
         Self{
             colors: HashMap::new(),
             dimensions: HashMap::new(),
             bools: HashMap::new(),
+            is_dark,
         }
+    }
+
+    pub fn is_dark(&self) -> bool{
+        self.is_dark
     }
 
     pub fn get_color(&self, id: ThemeColor) -> Color{

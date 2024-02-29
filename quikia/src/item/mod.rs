@@ -2,13 +2,16 @@ mod item;
 mod rectangle;
 mod logical_x;
 mod item_event;
-// mod text_block;
-// mod image;
+mod text_block;
+mod image;
+mod ripple;
+pub mod additional_property;
 
 pub use item::*;
 pub use rectangle::*;
-// pub use text_block::*;
-// pub use image::*;
+pub use text_block::*;
+pub use image::*;
+pub use ripple::*;
 
 pub use item_event::*;
 pub use logical_x::*;
@@ -16,7 +19,7 @@ pub use logical_x::*;
 use skia_safe::{Canvas, Color};
 use winit::dpi::LogicalPosition;
 use winit::event::{DeviceId, ElementState, Force, MouseButton, TouchPhase};
-use crate::property::{Gettable, Size};
+use crate::property::{Gettable, SharedProperty, Size};
 use std::collections::{HashMap, LinkedList};
 use std::ops::{Add, Deref, DerefMut};
 
@@ -85,7 +88,7 @@ pub struct LayoutParams {
     pub min_width: f32,
     pub min_height: f32,
     pub float_params: HashMap<String, f32>,
-    pub color_params: HashMap<String, Color>
+    pub color_params: HashMap<String, Color>,
 }
 
 impl LayoutParams {
@@ -176,6 +179,7 @@ impl From<ElementState> for ButtonState {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum ImeAction {
     Enabled,
     Enter,
@@ -243,7 +247,44 @@ impl PointerAction {
     }
 }
 
-
+pub enum AdditionalProperty{
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    I128(i128),
+    Isize(isize),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+    U128(u128),
+    Usize(usize),
+    F32(f32),
+    F64(f64),
+    Bool(bool),
+    String(String),
+    Color(Color),
+    Item(Item),
+    SharedI8(SharedProperty<i8>),
+    SharedI16(SharedProperty<i16>),
+    SharedI32(SharedProperty<i32>),
+    SharedI64(SharedProperty<i64>),
+    SharedI128(SharedProperty<i128>),
+    SharedIsize(SharedProperty<isize>),
+    SharedU8(SharedProperty<u8>),
+    SharedU16(SharedProperty<u16>),
+    SharedU32(SharedProperty<u32>),
+    SharedU64(SharedProperty<u64>),
+    SharedU128(SharedProperty<u128>),
+    SharedUsize(SharedProperty<usize>),
+    SharedF32(SharedProperty<f32>),
+    SharedF64(SharedProperty<f64>),
+    SharedBool(SharedProperty<bool>),
+    SharedString(SharedProperty<String>),
+    SharedColor(SharedProperty<Color>),
+    SharedItem(SharedProperty<Item>),
+}
 
 #[macro_export]
 macro_rules! impl_item_property {

@@ -1,8 +1,10 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
-use skia_safe::{Canvas, Color, Paint, Rect};
+use skia_safe::{BlurStyle, Canvas, Color, MaskFilter, Paint, Rect, RRect, Vector};
+use crate::app::ThemeColor;
 use crate::item::item::Item;
 use crate::item::{ItemEvent, LayoutDirection, MeasureMode};
+use crate::item::additional_property::{ShadowBlur, ShadowColor, ShadowOffsetX, ShadowOffsetY};
 use crate::property::{BoolProperty, ColorProperty, FloatProperty, Gettable, Observable, Observer};
 
 struct RectangleProperties {
@@ -105,6 +107,26 @@ impl Rectangle {
                             }
                         };
 
+                        let shadow_color = *layout_params.get_color_param("shadow_color").unwrap();
+                        let shadow_offset_x = *layout_params.get_float_param("shadow_offset_x").unwrap();
+                        let shadow_offset_y = *layout_params.get_float_param("shadow_offset_y").unwrap();
+                        let shadow_blur = *layout_params.get_float_param("shadow_blur").unwrap();
+
+                        let mut shadow_paint = Paint::default();
+                        shadow_paint.set_anti_alias(true);
+                        shadow_paint.set_color(shadow_color);
+                        shadow_paint.set_mask_filter(MaskFilter::blur(BlurStyle::Normal, shadow_blur, true));
+
+                        let shadow_rect = Rect::from_xywh(rect.left + shadow_offset_x, rect.top + shadow_offset_y, rect.width(), rect.height());
+
+                        draw_round_rect(canvas, use_smooth_corners, shadow_rect, radius_left_top, radius_right_top, radius_right_bottom, radius_left_bottom, &shadow_paint);
+
+                        // let mut shadow_paint = Paint::default();
+                        // shadow_paint.set_color(Color::from_argb(0x66, 0, 0, 0));
+                        // shadow_paint.set_mask_filter(MaskFilter::blur(BlurStyle::Normal, 10.0, true));
+                        // let rect = Rect::from_xywh(0.0, 0.0, 100.0, 100.0);
+                        // canvas.draw_round_rect(rect, 10.0, 10.0, &shadow_paint);
+
                         draw_round_rect(canvas, use_smooth_corners, rect, radius_left_top, radius_right_top, radius_right_bottom, radius_left_bottom, &Paint::default().set_anti_alias(true).set_color(color));
 
                         if let Some(foreground) = item.get_foreground().lock().as_mut() {
@@ -115,7 +137,7 @@ impl Rectangle {
 
                 .set_on_measure({
                     let properties = properties.clone();
-                    move|item, width_measure_mode, height_measure_mode| {
+                    move |item, width_measure_mode, height_measure_mode| {
                         let mut layout_params = item.get_layout_params().clone();
                         layout_params.init_from_item(item);
 
@@ -144,6 +166,31 @@ impl Rectangle {
                         }
 
                         layout_params.height = layout_params.height.max(item.get_min_height().get()).min(item.get_max_height().get());
+
+                        if let Some(shadow_color) = item.get_shadow_color() {
+                            layout_params.set_color_param("shadow_color", shadow_color.get());
+                        } else {
+                            layout_params.set_color_param("shadow_color", Color::from_argb(0x66, 0, 0, 0));
+                        }
+
+                        if let Some(shadow_offset_x) = item.get_shadow_offset_x() {
+                            layout_params.set_float_param("shadow_offset_x", shadow_offset_x.get());
+                        } else {
+                            layout_params.set_float_param("shadow_offset_x", 0.0);
+                        }
+
+                        if let Some(shadow_offset_y) = item.get_shadow_offset_y() {
+                            layout_params.set_float_param("shadow_offset_y", shadow_offset_y.get());
+                        } else {
+                            layout_params.set_float_param("shadow_offset_y", 6.0);
+                        }
+
+                        if let Some(shadow_blur) = item.get_shadow_blur() {
+                            layout_params.set_float_param("shadow_blur", shadow_blur.get());
+                        } else {
+                            layout_params.set_float_param("shadow_blur", 4.0);
+                        }
+
 
                         if let Some(background) = item.get_background().lock().as_mut() {
                             background.measure(
@@ -294,14 +341,14 @@ impl Rectangle {
 }
 
 fn draw_round_rect(canvas: &Canvas, smooth: bool, rect: Rect, radius_left_top: f32, radius_right_top: f32, radius_right_bottom: f32, radius_left_bottom: f32, paint: &Paint) {
-    let radius_left_top = radius_left_top.clamp(0.0, rect.width() / 2.0);
-    let radius_right_top = radius_right_top.clamp(0.0, rect.width() / 2.0);
-    let radius_right_bottom = radius_right_bottom.clamp(0.0, rect.width() / 2.0);
-    let radius_left_bottom = radius_left_bottom.clamp(0.0, rect.width() / 2.0);
+    let radius_left_top = radius_left_top.clamp(0.0, rect.width() / 2.0).clamp(0.0, rect.height() / 2.0);
+    let radius_right_top = radius_right_top.clamp(0.0, rect.width() / 2.0).clamp(0.0, rect.height() / 2.0);
+    let radius_right_bottom = radius_right_bottom.clamp(0.0, rect.width() / 2.0).clamp(0.0, rect.height() / 2.0);
+    let radius_left_bottom = radius_left_bottom.clamp(0.0, rect.width() / 2.0).clamp(0.0, rect.height() / 2.0);
 
-    let mut path = skia_safe::Path::new();
 
     if smooth {
+        let mut path = skia_safe::Path::new();
         path.move_to((rect.left + radius_left_top, rect.top));
         path.line_to((rect.right - radius_right_top, rect.top));
         path.quad_to((rect.right, rect.top), (rect.right, rect.top + radius_right_top));
@@ -312,55 +359,16 @@ fn draw_round_rect(canvas: &Canvas, smooth: bool, rect: Rect, radius_left_top: f
         path.line_to((rect.left, rect.top + radius_left_top));
         path.quad_to((rect.left, rect.top), (rect.left + radius_left_top, rect.top));
         path.close();
+        canvas.draw_path(&path, paint);
     } else {
-        path.move_to((rect.left + radius_left_top, rect.top));
-        path.arc_to(
-            Rect::from_xywh(rect.left, rect.top, radius_left_top * 2.0, radius_left_top * 2.0),
-            180.0,
-            90.0,
-            false,
-        );
-        path.line_to((rect.right - radius_right_top, rect.top));
-        path.arc_to(
-            Rect::from_xywh(
-                rect.right - radius_right_top * 2.0,
-                rect.top,
-                radius_right_top * 2.0,
-                radius_right_top * 2.0,
-            ),
-            270.0,
-            90.0,
-            false,
-        );
-        path.line_to((rect.right, rect.bottom - radius_right_bottom));
-        path.arc_to(
-            Rect::from_xywh(
-                rect.right - radius_right_bottom * 2.0,
-                rect.bottom - radius_right_bottom * 2.0,
-                radius_right_bottom * 2.0,
-                radius_right_bottom * 2.0,
-            ),
-            0.0,
-            90.0,
-            false,
-        );
-        path.line_to((rect.left + radius_left_bottom, rect.bottom));
-        path.arc_to(
-            Rect::from_xywh(
-                rect.left,
-                rect.bottom - radius_left_bottom * 2.0,
-                radius_left_bottom * 2.0,
-                radius_left_bottom * 2.0,
-            ),
-            90.0,
-            90.0,
-            false,
-        );
+        let radii = [
+            Vector::new(radius_left_top, radius_left_top),
+            Vector::new(radius_right_top, radius_right_top),
+            Vector::new(radius_right_bottom, radius_right_bottom),
+            Vector::new(radius_left_bottom, radius_left_bottom),
+        ];
 
-        path.line_to((rect.left, rect.top + radius_left_top));
-        path.close();
+        let rrect = RRect::new_rect_radii(rect, &radii);
+        canvas.draw_rrect(&rrect, paint);
     }
-
-
-    canvas.draw_path(&path, paint);
 }

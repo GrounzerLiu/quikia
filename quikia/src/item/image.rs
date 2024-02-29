@@ -213,7 +213,8 @@ impl NetworkImage {
                     let image = ImageDrawable::from_bytes(bytes);
                     let mut image_guard = image_clone.write().unwrap();
                     *image_guard = Some(image);
-                    app.request_re_layout();
+                    app.request_layout();
+                    app.send_event(UserEvent::Empty);
                 }
             }
         });
@@ -438,9 +439,9 @@ impl Image {
                                 }
 
                                 match width_measure_mode {
-                                    MeasureMode::Exactly(width) => {
+                                    MeasureMode::Specified(width) => {
                                         match height_measure_mode {
-                                            MeasureMode::Exactly(height) => {
+                                            MeasureMode::Specified(height) => {
                                                 layout_params.width = width.clamp(min_width, max_width);
                                                 layout_params.height = height.clamp(min_height, max_height);
                                                 let is_undersize = image_width < layout_params.width && image_height < layout_params.height;
@@ -487,7 +488,7 @@ impl Image {
                                                     }
                                                 }
                                             }
-                                            MeasureMode::AtMost(height) => {
+                                            MeasureMode::Unspecified(height) => {
                                                 layout_params.width = width.clamp(min_width, max_width);
 
                                                 let is_undersize = image_width < layout_params.width && image_height < layout_params.height;
@@ -512,9 +513,9 @@ impl Image {
                                             }
                                         }
                                     }
-                                    MeasureMode::AtMost(width) => {
+                                    MeasureMode::Unspecified(width) => {
                                         match height_measure_mode {
-                                            MeasureMode::Exactly(height) => {
+                                            MeasureMode::Specified(height) => {
                                                 layout_params.height = height.clamp(min_height, max_height);
 
                                                 let is_undersize = image_width < layout_params.width && image_height < layout_params.height;
@@ -537,7 +538,7 @@ impl Image {
                                                     }
                                                 }
                                             }
-                                            MeasureMode::AtMost(height) => {
+                                            MeasureMode::Unspecified(height) => {
                                                 let is_undersize = image_width < layout_params.width && image_height < layout_params.height;
                                                 let scale_mode = if is_undersize {
                                                     properties_guard.undersize_scale_mode.get()
@@ -566,14 +567,14 @@ impl Image {
                             }
 
                             if let Some(background) = item.get_background().lock().as_mut() {
-                                background.measure(MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
+                                background.measure(MeasureMode::Specified(layout_params.width), MeasureMode::Specified(layout_params.height));
                             }
 
                             if let Some(foreground) = item.get_foreground().lock().as_mut() {
-                                foreground.measure(MeasureMode::Exactly(layout_params.width), MeasureMode::Exactly(layout_params.height));
+                                foreground.measure(MeasureMode::Specified(layout_params.width), MeasureMode::Specified(layout_params.height));
                             }
 
-                            item.set_layout_params(layout_params);
+                            item.set_layout_params(&layout_params);
                         }
                     }
                 )

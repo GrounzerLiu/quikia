@@ -126,7 +126,7 @@ pub struct WindowCompositionAttribData {
 type SetWindowCompositionAttribute = unsafe extern "system" fn(
     hwnd: *mut c_void,
     data: *mut WindowCompositionAttribData,
-) -> i32;
+) -> I32;
 
 pub fn set_acrylic(hwnd: *mut c_void){
     let lib = unsafe { LoadLibraryA("user32.dll\0".as_ptr() as *const i8) };

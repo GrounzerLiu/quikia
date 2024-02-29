@@ -1,5 +1,5 @@
 use skia_safe::Canvas;
-use winit::event::{DeviceId, MouseButton};
+use winit::event::{DeviceId, KeyEvent, MouseButton};
 use crate::item::{ButtonState, ImeAction, Item, MeasureMode, PointerAction, PointerType};
 use crate::property::Gettable;
 
@@ -13,10 +13,16 @@ pub struct ItemEvent {
     pub on_layout: Box<dyn Fn(&mut Item, f32, f32)>,
     /// item, device_id, state, button, x, y
     pub on_mouse_input: Box<dyn Fn(&mut Item, DeviceId, ButtonState, MouseButton, f32, f32) -> bool>,
+    /// item, x, y
+    pub on_cursor_moved: Box<dyn Fn(&mut Item, f32, f32) -> bool>,
+    pub on_cursor_entered: Box<dyn Fn(&mut Item)>,
+    pub on_cursor_exited: Box<dyn Fn(&mut Item)>,
     /// item, pointer_action
     pub on_pointer_input: Box<dyn Fn(&mut Item, PointerAction) -> bool>,
     /// item, ime_action
-    pub on_ime_input: Box<dyn Fn(&mut Item, ImeAction)>,
+    pub on_ime_input: Box<dyn Fn(&mut Item, ImeAction) -> bool>,
+    /// item, device_id, key_event, is_synthetic
+    pub on_keyboard_input: Box<dyn Fn(&mut Item, DeviceId, KeyEvent, bool) -> bool>,
 }
 
 impl ItemEvent {
@@ -43,6 +49,22 @@ impl ItemEvent {
         self.on_mouse_input = Box::new(on_mouse_input);
         self
     }
+    
+    /// item, x, y
+    pub fn set_on_cursor_moved(mut self, on_cursor_moved: impl Fn(&mut Item, f32, f32) -> bool + 'static) -> Self {
+        self.on_cursor_moved = Box::new(on_cursor_moved);
+        self
+    }
+    
+    pub fn set_on_cursor_entered(mut self, on_cursor_entered: impl Fn(&mut Item) + 'static) -> Self {
+        self.on_cursor_entered = Box::new(on_cursor_entered);
+        self
+    }
+    
+    pub fn set_on_cursor_exited(mut self, on_cursor_exited: impl Fn(&mut Item) + 'static) -> Self {
+        self.on_cursor_exited = Box::new(on_cursor_exited);
+        self
+    }
 
     /// item, pointer_action
     pub fn set_on_pointer_input(mut self, on_pointer_input: impl Fn(&mut Item, PointerAction) -> bool + 'static) -> Self {
@@ -51,8 +73,14 @@ impl ItemEvent {
     }
 
     /// item, ime_action
-    pub fn set_on_ime_input(mut self, on_ime_input: impl Fn(&mut Item, ImeAction) + 'static) -> Self {
+    pub fn set_on_ime_input(mut self, on_ime_input: impl Fn(&mut Item, ImeAction) -> bool + 'static) -> Self {
         self.on_ime_input = Box::new(on_ime_input);
+        self
+    }
+
+    /// item, device_id, key_event, is_synthetic
+    pub fn set_on_keyboard_input(mut self, on_keyboard_input: impl Fn(&mut Item, DeviceId, KeyEvent, bool) -> bool + 'static) -> Self {
+        self.on_keyboard_input = Box::new(on_keyboard_input);
         self
     }
 }
@@ -166,6 +194,11 @@ impl Default for ItemEvent {
                     handled
                 }
             ),
+            on_cursor_moved: Box::new(|_, _, _| {
+                false
+            }),
+            on_cursor_entered: Box::new(|_| {}),
+            on_cursor_exited: Box::new(|_| {}),
             on_pointer_input: Box::new(
                 |item, pointer_action| {
                     let mut handled = false;
@@ -186,7 +219,12 @@ impl Default for ItemEvent {
                     handled
                 }
             ),
-            on_ime_input: Box::new(|_, _| {}),
+            on_ime_input: Box::new(|_, _| {
+                false
+            }),
+            on_keyboard_input: Box::new(|_, _, _, _| {
+                false
+            }),
         }
     }
 }

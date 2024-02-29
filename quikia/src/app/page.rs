@@ -1,7 +1,7 @@
 use std::collections::linked_list::{Iter, IterMut};
 use std::collections::LinkedList;
 use crate::app::SharedApp;
-use crate::item::{Item, ItemPath};
+use crate::item::Item;
 
 
 pub trait Page {

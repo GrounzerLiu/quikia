@@ -64,6 +64,7 @@ impl Observer {
 pub trait Observable {
     fn add_observer(&self, listener: Observer);
     fn remove_observer(&self, owner_id: usize);
+    fn clear_observers(&self);
     fn notify(&self);
 }
 
@@ -108,6 +109,10 @@ impl<T> Property<T> {
         self.observers.lock().unwrap().retain(|observer| {
             observer.owner_id() != owner_id
         });
+    }
+
+    pub fn clear_observers(&mut self) {
+        self.observers.lock().unwrap().clear();
     }
 
     pub fn notify_observers(&mut self) {
@@ -243,6 +248,10 @@ impl<T> Observable for SharedProperty<T> {
 
     fn remove_observer(&self, owner_id: usize) {
         self.value.lock().unwrap().remove_observer(owner_id);
+    }
+
+    fn clear_observers(&self) {
+        self.value.lock().unwrap().clear_observers();
     }
 
     fn notify(&self) {

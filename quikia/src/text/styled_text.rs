@@ -300,6 +300,10 @@ impl Observable for StyledText{
         self.observers.lock().unwrap().retain(|observer| observer.owner_id() != owner_id);
     }
 
+    fn clear_observers(&self) {
+        self.observers.lock().unwrap().clear();
+    }
+
     fn notify(&self) {
         self.observers.lock().unwrap().iter_mut().for_each(|observer| observer.notify());
     }

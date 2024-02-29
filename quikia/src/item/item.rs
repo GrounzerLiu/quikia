@@ -1,14 +1,15 @@
+use std::collections::HashMap;
 use skia_safe::Canvas;
 use skia_safe::gpu::SyncCpu::No;
-use winit::event::{DeviceId, MouseButton};
+use winit::event::{DeviceId, KeyEvent, MouseButton};
 use crate::app::{current_app, SharedApp};
 use crate::impl_item_property;
-use crate::item::{ButtonState, Gravity, ImeAction, ItemEvent, ItemPath, LayoutDirection, LayoutParams, MeasureMode, PointerAction};
-use crate::property::{BoolProperty, FloatProperty, GravityProperty, ItemProperty, Observable, Observer, SharedProperty, Size, SizeProperty};
+use crate::item::{AdditionalProperty, ButtonState, Gravity, ImeAction, ItemEvent, ItemPath, LayoutDirection, LayoutParams, MeasureMode, PointerAction};
+use crate::property::{BoolProperty, FloatProperty, Gettable, GravityProperty, ItemProperty, Observable, Observer, SharedProperty, Size, SizeProperty};
 
 pub struct Item {
     app: SharedApp,
-    path: ItemPath,
+    tag: String,
     children: Vec<Item>,
     active: BoolProperty,
     width: SizeProperty,
@@ -19,7 +20,6 @@ pub struct Item {
     focusable: BoolProperty,
     focused: BoolProperty,
     focusable_when_clicked: BoolProperty,
-    is_cursor_inside: bool,
     min_width: FloatProperty,
     min_height: FloatProperty,
     max_width: FloatProperty,
@@ -36,13 +36,25 @@ pub struct Item {
     background: ItemProperty,
     foreground: ItemProperty,
     enable_clipping: BoolProperty,
+    additional_properties: HashMap<String, AdditionalProperty>,
     on_click: Option<Box<dyn Fn()>>,
+    on_blur: Option<Box<dyn Fn()>>,
+    on_focus: Option<Box<dyn Fn()>>,
+    on_cursor_entered: Box<dyn Fn()>,
+    on_cursor_exited: Box<dyn Fn()>,
     on_draw: Box<dyn Fn(&mut Item, &Canvas)>,
     on_measure: Box<dyn Fn(&mut Item, MeasureMode, MeasureMode)>,
     on_layout: Box<dyn Fn(&mut Item, f32, f32)>,
     on_mouse_input: Box<dyn Fn(&mut Item, DeviceId, ButtonState, MouseButton, f32, f32) -> bool>,
+    
+    on_cursor_moved: Box<dyn Fn(&mut Item, f32, f32) -> bool>,
+    on_cursor_entered_event: Box<dyn Fn(&mut Item)>,
+    on_cursor_exited_event: Box<dyn Fn(&mut Item)>,
+    is_cursor_inside: bool,
+    
     on_pointer_input: Box<dyn Fn(&mut Item, PointerAction) -> bool>,
-    on_ime_input: Box<dyn Fn(&mut Item, ImeAction)>,
+    on_ime_input: Box<dyn Fn(&mut Item, ImeAction) -> bool>,
+    on_keyboard_input: Box<dyn Fn(&mut Item, DeviceId, KeyEvent, bool) -> bool>,
 }
 
 
@@ -53,7 +65,6 @@ impl_item_property!(Item, layout_direction, get_layout_direction, SharedProperty
 impl_item_property!(Item, horizontal_gravity, get_horizontal_gravity, GravityProperty);
 impl_item_property!(Item, vertical_gravity, get_vertical_gravity, GravityProperty);
 impl_item_property!(Item, focusable, get_focusable, BoolProperty);
-impl_item_property!(Item, focused, get_focused, BoolProperty);
 impl_item_property!(Item, focusable_when_clicked, get_focusable_when_clicked, BoolProperty);
 impl_item_property!(Item, min_width, get_min_width, FloatProperty);
 impl_item_property!(Item, min_height, get_min_height, FloatProperty);
@@ -75,11 +86,10 @@ impl_item_property!(Item, enable_clipping, get_enable_clipping, BoolProperty);
 impl Item {
     pub fn new(item_events: ItemEvent) -> Self {
         let app = current_app().unwrap();
-        let id = app.lock().unwrap().new_id();
         let layout_direction = app.layout_direction();
         Item {
             app,
-            path: ItemPath::new(),
+            tag: String::new(),
             children: Vec::with_capacity(1),
             active: true.into(),
             width: Size::Default.into(),
@@ -107,13 +117,22 @@ impl Item {
             background: None.into(),
             foreground: None.into(),
             enable_clipping: false.into(),
+            additional_properties: HashMap::new(),
             on_click: None,
+            on_blur: None,
+            on_focus: None,
+            on_cursor_entered: Box::new(|| {}),
+            on_cursor_exited: Box::new(|| {}),
             on_draw: item_events.on_draw,
             on_measure: item_events.on_measure,
             on_layout: item_events.on_layout,
             on_mouse_input: item_events.on_mouse_input,
+            on_cursor_moved: item_events.on_cursor_moved,
+            on_cursor_entered_event: item_events.on_cursor_entered,
+            on_cursor_exited_event: item_events.on_cursor_exited,
             on_pointer_input: item_events.on_pointer_input,
             on_ime_input: item_events.on_ime_input,
+            on_keyboard_input: item_events.on_keyboard_input,
         }
     }
 
@@ -125,22 +144,17 @@ impl Item {
         self as *const Item as usize
     }
 
-    pub(crate) fn get_item_path(&self) -> &ItemPath {
-        &self.path
+    pub fn get_tag(&self) -> &str {
+        &self.tag
     }
 
-    pub(crate) fn set_item_path(&mut self, item_path: ItemPath) {
-        self.path = item_path;
+    pub fn tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = tag.into();
+        self
     }
 
     pub fn set_children(&mut self, children: Vec<Item>) {
         self.children = children;
-        let self_path = &self.path;
-        self.children.iter_mut().enumerate().for_each(|(i, child)| {
-            let mut child_path = self_path.clone();
-            child_path.push_back(i);
-            child.set_item_path(child_path);
-        });
     }
 
     pub fn get_children(&self) -> &Vec<Item> {
@@ -151,6 +165,21 @@ impl Item {
         &mut self.children
     }
 
+    pub fn set_additional_property(&mut self, key: impl Into<String>, value: impl Into<AdditionalProperty>) {
+        self.additional_properties.insert(key.into(), value.into());
+    }
+    
+    pub fn get_additional_property(&self, key: impl Into<String>) -> Option<&AdditionalProperty> {
+        self.additional_properties.get(&key.into())
+    }
+
+    pub fn focus(&mut self) {
+        self.focused.set_value(true);
+    }
+
+    pub fn blur(&mut self) {
+        self.focused.set_value(false);
+    }
 
     pub fn draw(&mut self, canvas: &Canvas) {
         unsafe {
@@ -168,11 +197,11 @@ impl Item {
         }
     }
 
-    pub fn layout(&mut self, width: f32, height: f32) {
+    pub fn layout(&mut self, x: f32, y: f32) {
         unsafe {
             let s = self as *const Item;
             let on_layout = &(*s).on_layout;
-            on_layout(self, width, height);
+            on_layout(self, x, y);
         }
     }
 
@@ -182,6 +211,46 @@ impl Item {
             let s = self as *const Item;
             let on_mouse_input = &(*s).on_mouse_input;
             on_mouse_input(self, device_id, state, button, x, y)
+        }
+    }
+    
+    pub fn cursor_moved(&mut self, x: f32, y: f32) -> bool
+    {
+        if self.get_layout_params().contains(x, y){
+            if !self.is_cursor_inside {
+                self.is_cursor_inside = true;
+                unsafe {
+                    let s = self as *const Item;
+                    let on_cursor_entered_event = &(*s).on_cursor_entered_event;
+                    on_cursor_entered_event(self);
+                    let on_cursor_entered = &(*s).on_cursor_entered;
+                    on_cursor_entered();
+                }
+            }
+        } else {
+            if self.is_cursor_inside {
+                self.is_cursor_inside = false;
+                unsafe {
+                    let s = self as *const Item;
+                    let on_cursor_exited_event = &(*s).on_cursor_exited_event;
+                    on_cursor_exited_event(self);
+                    let on_cursor_exited = &(*s).on_cursor_exited;
+                    on_cursor_exited();
+                }
+            }
+        }
+        unsafe {
+            let s = self as *const Item;
+            let on_cursor_moved = &(*s).on_cursor_moved;
+            let handled = on_cursor_moved(self, x, y);
+            if !handled {
+                for child in self.get_children_mut() {
+                    if child.cursor_moved(x, y) {
+                        return true;
+                    }
+                }
+            }
+            handled
         }
     }
 
@@ -194,11 +263,35 @@ impl Item {
         }
     }
 
-    pub fn ime_input(&mut self, action: ImeAction) {
+    pub fn ime_input(&mut self, action: ImeAction) -> bool {
         unsafe {
             let s = self as *const Item;
             let on_ime_input = &(*s).on_ime_input;
-            on_ime_input(self, action)
+            let handled = on_ime_input(self, action.clone());
+            if !handled {
+                for child in self.get_children_mut() {
+                    if child.ime_input(action.clone()) {
+                        return true;
+                    }
+                }
+            }
+            handled
+        }
+    }
+
+    pub fn keyboard_input(&mut self, device_id: DeviceId, event: KeyEvent, is_synthetic: bool) -> bool  {
+        unsafe {
+            let s = self as *const Item;
+            let on_keyboard_input = &(*s).on_keyboard_input;
+            let handled = on_keyboard_input(self, device_id, event.clone(), is_synthetic);
+            if !handled {
+                for child in self.get_children_mut() {
+                    if child.keyboard_input(device_id, event.clone(), is_synthetic) {
+                        return true;
+                    }
+                }
+            }
+            handled
         }
     }
 
@@ -221,6 +314,38 @@ impl Item {
 
     pub fn get_on_click(&self) -> Option<&Box<dyn Fn()>> {
         self.on_click.as_ref()
+    }
+
+    pub fn on_blur(mut self, on_blur: impl Fn() + 'static) -> Self {
+        self.on_blur = Some(Box::new(on_blur));
+        self
+    }
+
+    pub fn invoke_on_blur(&mut self) {
+        if let Some(on_blur) = &self.on_blur {
+            on_blur();
+        }
+    }
+
+    pub fn on_focus(mut self, on_focus: impl Fn() + 'static) -> Self {
+        self.on_focus = Some(Box::new(on_focus));
+        self
+    }
+
+    pub fn invoke_on_focus(&mut self) {
+        if let Some(on_focus) = &self.on_focus {
+            on_focus();
+        }
+    }
+
+    pub fn on_cursor_entered(mut self, on_cursor_entered: impl Fn() + 'static) -> Self {
+        self.on_cursor_entered = Box::new(on_cursor_entered);
+        self
+    }
+
+    pub fn on_cursor_exited(mut self, on_cursor_exited: impl Fn() + 'static) -> Self {
+        self.on_cursor_exited = Box::new(on_cursor_exited);
+        self
     }
 
     pub fn gravity(mut self, gravity:impl Into<(GravityProperty,GravityProperty)>) -> Self {
@@ -247,6 +372,28 @@ impl Item {
 
         self
     }
+
+    pub fn focused(mut self, focused: impl Into<BoolProperty>) -> Self {
+        self.focused = focused.into();
+        let app = self.app.clone();
+        let id = self.get_id();
+        let focused_clone = self.focused.clone();
+        self.focused.add_observer(
+            Observer::new_without_id(move||{
+                if focused_clone.get() {
+                    app.lock().unwrap().request_focus(id)
+                } else {
+                    app.lock().unwrap().request_focus(0)
+                }
+                app.lock().unwrap().request_layout();
+            })
+        );
+        self
+    }
+
+    pub fn get_focused(&self) -> BoolProperty {
+        self.focused.clone()
+    }
 }
 
 impl Into<(GravityProperty,GravityProperty)> for &SharedProperty<Gravity> {
@@ -256,3 +403,24 @@ impl Into<(GravityProperty,GravityProperty)> for &SharedProperty<Gravity> {
         (horizontal_gravity.into(), vertical_gravity.into())
     }
 }
+
+macro_rules! impl_into_additional_property {
+    ($t:ty, $variant:ident) => {
+        impl From<$t> for AdditionalProperty {
+            fn from(value: $t) -> Self {
+                AdditionalProperty::$variant(value)
+            }
+        }
+    };
+}
+
+impl_into_additional_property!(i8, I8);
+impl_into_additional_property!(i16, I16);
+impl_into_additional_property!(i32, I32);
+impl_into_additional_property!(i64, I64);
+impl_into_additional_property!(u8, U8);
+impl_into_additional_property!(u16, U16);
+impl_into_additional_property!(f32, F32);
+impl_into_additional_property!(f64, F64);
+impl_into_additional_property!(bool, Bool);
+impl_into_additional_property!(String, String);

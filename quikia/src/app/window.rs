@@ -1,4 +1,3 @@
-
 // use winapi::shared::windef::HWND__;
 use std::{ffi::CString, fs, num::NonZeroU32};
 use std::time::Instant;
@@ -22,7 +21,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Rect, FontStyle, FontMgr, Data, Picture, ISize, AlphaType, ColorFilter, BlendMode, ImageInfo, Color4f, ImageFilter, SamplingOptions, FilterMode, MipmapMode, Image, TileMode};
+use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Rect, FontStyle, FontMgr, Data, Picture, ISize, AlphaType, ColorFilter, BlendMode, ImageInfo, Color4f, ImageFilter, SamplingOptions, FilterMode, MipmapMode, Image, TileMode, MaskFilter, BlurStyle};
 use skia_safe::canvas::SaveLayerRec;
 use skia_safe::image_filters::{blur, CropRect};
 use skia_safe::svg::{Canvas, Dom};
@@ -39,9 +38,6 @@ use winit::platform::android::EventLoopBuilderExtAndroid;
 use crate::anim::Animation;
 use crate::app::{ANIMATIONS, new_app, Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
 use crate::item::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
-//use crate::old_item::{ButtonState, ImeAction, ItemPath, KeyboardInput, MeasureMode, PointerType};
-
-// use winapi::um::dwmapi::{DWM_BB_ENABLE, DWM_BLURBEHIND, DwmEnableBlurBehindWindow};
 
 struct Env {
     surface: Surface,
@@ -52,7 +48,6 @@ struct Env {
     num_samples: usize,
     stencil_size: usize,
 }
-
 
 fn init_env(elwt: &EventLoopWindowTarget<UserEvent>) -> (Env, Window) {
     let template = ConfigTemplateBuilder::new()
@@ -209,15 +204,10 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
 
         info.clear();
 
+        let event_clone = event.clone();
+
         match event {
             Event::UserEvent(user_event) => {
-                // match user_event {
-                //     UserEvent::TimerExpired(item_path, msg) => {
-                //         let mut page_item = pages.current_page().unwrap();
-                //         let mut old_item = page_item.find_item_mut(&item_path).unwrap().as_event_input();
-                //         old_item.on_timer_expired(msg);
-                //     }
-                // }
             }
             Event::WindowEvent { window_id, event } => {
                 match event {
@@ -275,8 +265,7 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                                 _ => {}
                             }
                         });
-
-                        //pages.current_page().unwrap().root_item_mut().as_event_input().on_cursor_moved(cursor_position.x, cursor_position.y);
+                        pages.current_page().unwrap().root_item_mut().cursor_moved(cursor_position.x, cursor_position.y);
                     }
                     WindowEvent::MouseInput { device_id, state, button } => {
                         //println!("pointer_catch={:?}", pointer_catch);
@@ -317,28 +306,23 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                         }
                     }
 
-                    /*                    WindowEvent::KeyboardInput {
-                                            device_id, event, is_synthetic
-                                        } => {
-                                            let app = app.lock().unwrap();
-                                            let focused_item_path = app.focused_item_path.clone();
-                                            drop(app);
-                                            if let Some(focused_item_path) = focused_item_path {
-                                                if let Some(old_item) = pages.current_page().unwrap().find_item_mut(&focused_item_path) {
-                                                    let mut old_item = old_item.as_event_input();
-                                                    old_item.on_keyboard_input(KeyboardInput {
-                                                        device_id,
-                                                        event: event.clone(),
-                                                        is_synthetic,
-                                                    });
-                                                }
-                                            }
-                                        }*/
+                    WindowEvent::KeyboardInput {
+                        device_id, event, is_synthetic
+                    } => {
+                        let app = app.lock().unwrap();
+                        let focused_item_id = app.focused_item_id;
+                        drop(app);
+                        if let Some(focused_item_id) = focused_item_id {
+                            if let Some(item) = pages.current_page().unwrap().find_item_mut(focused_item_id) {
+                                item.keyboard_input(device_id, event, is_synthetic);
+                            }
+                        }
+                    }
 
                     WindowEvent::Ime(ime) => {
                         let app = app.lock().unwrap();
-                        let focused_item_path = &app.focused_item_id;
-                        if let Some(focused_item_path) = focused_item_path {
+                        let focused_item_id = &app.focused_item_id;
+                        if let Some(focused_item_path) = focused_item_id {
                             if let Some(item) = pages.current_page().unwrap().find_item_mut(*focused_item_path) {
                                 drop(app);
                                 item.ime_input(match ime {
@@ -351,84 +335,8 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                         }
                     }
 
-                    /*                                        WindowEvent::Touch(Touch {
-                                                                                   device_id, phase, location, force, id
-                                                                               }) => {
-                                                                let scale_factor = app.scale_factor();
-                                                                let location = LogicalPosition::new(location.x as f32 / scale_factor, location.y as f32 / scale_factor);
-                                                                match phase {
-                                                                    TouchPhase::Started => {
-                                                                        pages.current_page().unwrap()
-                                                                            .root_item_mut()
-                                                                            .as_event_input()
-                                                                            .on_touch(device_id.clone(), phase.clone(), location.clone(), force.clone(), id.clone());
-                                                                    }
-                                                                    TouchPhase::Moved => {
-                                                                        // pages.current_page().unwrap().root_item_mut().as_event_input().on_touch(
-                                                                        //     device_id.clone(),
-                                                                        //     phase.clone(),
-                                                                        //     location.clone(),
-                                                                        //     force.clone(),
-                                                                        //     id.clone(),
-                                                                        // );
-                                                                        info.push_str(format!("pointer_catch={:?}\n",pointer_catch).as_str());
-                                                                        pointer_catch.iter().for_each(|(pointer_type, path)| {
-                                                                            match pointer_type {
-                                                                                PointerType::Touch { id:pid } => {
-                                                                                    //if *pid == id {
-                                                                                        if let Some(old_item) = pages.current_page().unwrap().find_item_mut(path) {
-                                                                                            old_item.as_event_input().on_touch(
-                                                                                                device_id.clone(),
-                                                                                                phase.clone(),
-                                                                                                location.clone(),
-                                                                                                force.clone(),
-                                                                                                id.clone(),
-                                                                                            );
-                                                                                        }
-                                                                                    //}
-                                                                                }
-                                                                                _ => {}
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                    TouchPhase::Ended => {
-                                                                        pointer_catch.iter().for_each(|(pointer_type, path)| {
-                                                                            match pointer_type {
-                                                                                PointerType::Touch { id:pid } => {
-                                                                                    if *pid == id {
-                                                                                        if let Some(old_item) = pages.current_page().unwrap().find_item_mut(path) {
-                                                                                            old_item.as_event_input().on_touch(
-                                                                                                device_id.clone(),
-                                                                                                phase.clone(),
-                                                                                                location.clone(),
-                                                                                                force.clone(),
-                                                                                                id.clone(),
-                                                                                            );
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                                _ => {}
-                                                                            }
-                                                                        });
-                                                                        pointer_catch.retain(|(pointer_type, _)| {
-                                                                            match pointer_type {
-                                                                                PointerType::Touch { id:pid } => {
-                                                                                    *pid != id
-                                                                                }
-                                                                                _ => true
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                    TouchPhase::Cancelled => {}
-                                                                }
-                                                            }
-
-                                                            WindowEvent::MouseWheel { device_id, delta, phase } => {
-                                                                pages.current_page().unwrap().root_item_mut().as_event_input().on_mouse_wheel(delta);
-                                                            }*/
-
                     WindowEvent::RedrawRequested => {
-                        app.request_redraw();
+                        app.lock().unwrap().need_redraw = true;
                     }
                     _ => {}
                 }
@@ -443,23 +351,21 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
             app.lock().unwrap().pointer_catch = None;
         }
 
-        if let Some(request_focus_path) = &app.lock().unwrap().request_focus_id {
-            if let Some(focused_item_path) = &app.lock().unwrap().focused_item_id {
-                let focused_item = pages.current_page().unwrap().find_item_mut(*focused_item_path).unwrap();
-                // if let Some(on_blur) = focused_item.get_on_blur() {
-                //     on_blur();
-                // }
+        {
+            let mut app = app.lock().unwrap();
+            if let Some(request_focus_id) = app.request_focus_id {
+                if let Some(focused_item_id) = app.focused_item_id {
+                    if let Some(focused_item) = pages.current_page().unwrap().find_item_mut(focused_item_id) {
+                        focused_item.invoke_on_blur();
+                    }
+                }
+                if let Some(request_focus_item) = pages.current_page().unwrap().find_item_mut(request_focus_id) {
+                    request_focus_item.invoke_on_focus();
+                    app.focused_item_id = Some(request_focus_id);
+                    app.request_focus_id = None;
+                }
             }
-
-            let item = pages.current_page().unwrap().find_item_mut(*request_focus_path).unwrap();
-            // if let Some(on_focus) = item.get_on_focus() {
-            //     on_focus();
-            // }
-            app.lock().unwrap().focused_item_id = Some(request_focus_path.clone());
-            app.lock().unwrap().request_focus_id = None;
         }
-
-
 
         if app.lock().unwrap().need_rebuild {
             let mut page_item = pages.current_page().unwrap();
@@ -485,8 +391,6 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
         }
 
 
-
-
         if app.lock().unwrap().need_redraw {
             let env = env.as_mut().unwrap();
             let scale_factor = app.scale_factor();
@@ -495,26 +399,25 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
 
             canvas.clear(app.lock().unwrap().theme().get_color(ThemeColor::Background));
             //canvas.clear(Color::from_argb(0x80,0,0,0));
-            if let Some(wallpaper)=&wallpaper{
-                let app = app.lock().unwrap();
-                let window = app.window();
-                let window_client_position = window.inner_position();
-                if let Ok(window_client_position) = window_client_position {
-                    let x = - window_client_position.x as f32 / scale_factor;
-                    let y = - window_client_position.y as f32 / scale_factor;
-                    let mut paint = Paint::default();
-                    canvas.draw_image_rect(
-                        wallpaper,
-                        None,
-                        Rect::from_xywh(x, y, wallpaper.width() as f32, wallpaper.height() as f32),
-                        &paint,
-                    );
-                }
-            }
+            // if let Some(wallpaper) = &wallpaper {
+            //     let app = app.lock().unwrap();
+            //     let window = app.window();
+            //     let window_client_position = window.inner_position();
+            //     if let Ok(window_client_position) = window_client_position {
+            //         let x = -window_client_position.x as f32 / scale_factor;
+            //         let y = -window_client_position.y as f32 / scale_factor;
+            //         let mut paint = Paint::default();
+            //         canvas.draw_image_rect(
+            //             wallpaper,
+            //             None,
+            //             Rect::from_xywh(x, y, wallpaper.width() as f32, wallpaper.height() as f32),
+            //             &paint,
+            //         );
+            //     }
+            // }
 
 
             canvas.save();
-            // canvas.translate((app.lock().unwrap().window().inner_size().width as f32,0.0));
             canvas.scale((scale_factor, scale_factor));
 
             if let Some(page_item) = pages.current_page() {
@@ -545,16 +448,16 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                             animation.to = Some(Animation::item_to_layout_params(item));
                         }
                         animation.update(item, Instant::now());
-                        elwt.set_control_flow(ControlFlow::Poll);
+                        app.request_redraw();
+                        //elwt.set_control_flow(ControlFlow::Poll);
                     }
                 }
                 animations.retain(|animation| animation.is_running());
-            }
-            else {
-                elwt.set_control_flow(ControlFlow::Wait);
+            } else {
+                //elwt.set_control_flow(ControlFlow::Wait);
             }
         }
-
+        println!("loop, {:?}", event_clone);
     }).unwrap();
 }
 

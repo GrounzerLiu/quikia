@@ -130,6 +130,14 @@ impl ParagraphWrapper {
         self.paragraph.height()
     }
 
+    pub fn base_line(&self) -> f32 {
+        if let Some(line_metrics) = self.paragraph.get_line_metrics_at(0) {
+            line_metrics.baseline as f32
+        } else {
+            0.0
+        }
+    }
+
     /// get the cursor position and height of the line at the index
     /// * return (x,y,height)
     pub fn get_cursor_position(&self, index: usize) -> (f32, f32, f32) {
@@ -140,7 +148,7 @@ impl ParagraphWrapper {
         }
         let is_start = index == 0;
 
-        let mut utf16_index = *self.byte_to_utf16_indices.get(&index).expect(format!("index:{} is not a grapheme cluster boundary", index).as_str());
+        let utf16_index = *self.byte_to_utf16_indices.get(&index).expect(format!("index:{} is not a grapheme cluster boundary", index).as_str());
         let glyph_index = *self.byte_to_glyph_indices.get(&index).unwrap();
         return if is_start {
             let next_byte_index = *self.glyph_to_byte_indices.get(&(glyph_index + 1)).unwrap();
@@ -171,7 +179,7 @@ impl ParagraphWrapper {
                     (box0.rect.left, box0.rect.top, box0.rect.height())
                 }
             }
-        }
+        };
     }
 
     pub fn get_rects_for_range(&self, range: Range<usize>) -> Vec<TextBox> {

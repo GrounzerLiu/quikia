@@ -23,6 +23,7 @@ impl Button {
         drop(app);
         let item =
             self.item
+                .editable(false)
                 .text("Filled button")
                 .color(text_color)
                 .unwrap()
