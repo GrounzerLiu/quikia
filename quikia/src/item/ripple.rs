@@ -1,7 +1,8 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use skia_safe::{Canvas, Color, Paint, Rect};
-use crate::anim::Animation;
+use crate::animation::Animation;
 use crate::item::item::Item;
 use crate::item::{ItemEvent, LayoutDirection, MeasureMode, PointerAction};
 use crate::property::{BoolProperty, ColorProperty, FloatProperty, Gettable, Observable, Observer};
@@ -158,10 +159,10 @@ impl Ripple {
                                 let mut ripple_radius = ripple_radius.clone();
                                 let max_ripple_radius = max_ripple_radius.clone();
                                 move || {
-                                    ripple_radius.set_value(max_ripple_radius.get());
-                                    app.request_layout();
+                                    // ripple_radius.set_value(max_ripple_radius.get());
+                                    // app.request_layout();
                                 }
-                            }).duration(1000_u32).start();
+                            }).duration(Duration::from_millis(1000)).start();
                         }
                         false
                     }

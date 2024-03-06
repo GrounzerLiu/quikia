@@ -215,6 +215,7 @@ impl NetworkImage {
                     *image_guard = Some(image);
                     app.request_layout();
                     app.send_event(UserEvent::Empty);
+                    //TODO: Maybe request_layout() not working outside the main thread.
                 }
             }
         });

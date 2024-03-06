@@ -1,17 +1,14 @@
 use std::collections::{HashMap, LinkedList};
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use winit::window::Window;
 use std::thread::ThreadId;
 use winit::event_loop::EventLoopProxy;
-use crate::anim::Animation;
+use crate::animation::Animation;
 use crate::app::Theme;
 use crate::item::{ItemPath, LayoutDirection, PointerType};
-
-lazy_static!(
-    pub(crate) static ref ANIMATIONS:Mutex<Vec<Animation>> = Mutex::new(Vec::new());
-);
 
 lazy_static!(
     pub(crate) static ref APPS:Mutex<LinkedList<(ThreadId, SharedApp)>> = Mutex::new(LinkedList::new());
@@ -42,6 +39,7 @@ pub(crate) enum UserEvent {
 pub struct App {
     window: Option<Window>,
     theme: Theme,
+    pub(crate) animations: Arc<Mutex<Vec<Animation>>>,
     pub(crate) need_redraw: bool,
     pub(crate) need_layout: bool,
     pub(crate) need_rebuild: bool,
@@ -51,9 +49,6 @@ pub struct App {
     pub(crate) request_focus_id: Option<usize>,
 
     pub(crate) pointer_catch: Option<(PointerType, usize)>,
-
-    pub(crate) named_ids: HashMap<String, usize>,
-    pub(crate) unnamed_id: usize,
 }
 
 impl App {
@@ -61,6 +56,7 @@ impl App {
         Self {
             window: None,
             theme,
+            animations: Arc::new(Mutex::new(Vec::new())),
             need_redraw: false,
             need_layout: false,
             need_rebuild: false,
@@ -69,23 +65,6 @@ impl App {
             focused_item_id: None,
             request_focus_id: None,
             pointer_catch: None,
-            named_ids: HashMap::new(),
-            unnamed_id: 0,
-        }
-    }
-
-    pub fn new_id(&mut self) -> usize {
-        self.unnamed_id += 1;
-        self.unnamed_id
-    }
-
-    pub fn id(&mut self, name: &str) -> usize {
-        if let Some(id) = self.named_ids.get(name) {
-            *id
-        } else {
-            let id = self.new_id();
-            self.named_ids.insert(name.to_string(), id);
-            id
         }
     }
 
@@ -212,14 +191,6 @@ impl Deref for SharedApp {
 }
 
 impl SharedApp {
-    pub fn new_id(&self) -> usize {
-        self.app.lock().unwrap().new_id()
-    }
-
-    pub fn id(&self, name: &str) -> usize {
-        self.app.lock().unwrap().id(name)
-    }
-
     pub fn set_theme(&self, theme: Theme) {
         self.app.lock().unwrap().set_theme(theme);
     }

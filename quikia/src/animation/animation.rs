@@ -1,17 +1,13 @@
 use std::collections::{HashMap, LinkedList};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 use material_color_utilities::{blend_cam16ucs, blend_hct_hue};
 use skia_safe::Color;
-use crate::app::ANIMATIONS;
+use crate::app::current_app;
 use crate::item::{Item, LayoutParams};
 
-pub(crate) struct LayoutTransition {
-    pub action: Box<dyn FnMut() + 'static>,
-}
-
-unsafe impl Send for LayoutTransition {}
-
-pub struct  AnimationDuration {
+/*pub struct  AnimationDuration {
     pub duration: Duration,
 }
 
@@ -45,36 +41,78 @@ impl From<u64> for AnimationDuration {
             duration: Duration::from_millis(duration),
         }
     }
+}*/
+
+#[derive(Clone)]
+pub struct AnimationController {
+    is_finished: Arc<Mutex<bool>>,
 }
 
+impl AnimationController {
+    pub fn new() -> Self {
+        Self {
+            is_finished: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    pub fn is_finished(&self) -> bool {
+        *self.is_finished.lock().unwrap()
+    }
+
+    pub fn finish(&self) {
+        *self.is_finished.lock().unwrap() = true;
+    }
+}
+
+pub(crate) struct LayoutTransition {
+    pub layout_transition: Box<dyn FnMut()>,
+}
+
+impl LayoutTransition {
+    pub fn new(layout_transition: impl FnMut() + 'static) -> Self {
+        Self {
+            layout_transition: Box::new(layout_transition),
+        }
+    }
+
+    pub fn run(&mut self) {
+        (self.layout_transition)();
+    }
+}
+
+unsafe impl Send for LayoutTransition {}
+
 pub struct Animation {
+    animation_controller: AnimationController,
     start_time: Instant,
     duration: Duration,
     pub(crate) layout_transition: LayoutTransition,
     pub(crate) from: Option<HashMap<usize, LayoutParams>>,
     pub(crate) to: Option<HashMap<usize, LayoutParams>>,
-    is_running: bool,
 }
 
 impl Animation {
-    pub fn new(layout_change: impl FnMut() + 'static) -> Self {
-        let layout_transition = LayoutTransition {
-            action: Box::new(layout_change),
-        };
+    pub fn new(layout_transition: impl FnMut() + 'static) -> Self {
         Self {
+            animation_controller: AnimationController::new(),
             start_time: Instant::now(),
             duration: Duration::from_millis(2000),
-            layout_transition,
+            layout_transition: LayoutTransition::new(layout_transition),
             from: None,
             to: None,
-            is_running: false,
         }
     }
 
-    pub fn start(mut self) {
+    pub fn start(mut self) -> AnimationController {
         self.start_time = Instant::now();
-        self.is_running = true;
-        ANIMATIONS.lock().unwrap().push(self)
+        if let Some(app) = current_app() {
+            let animation_controller = self.animation_controller.clone();
+            app.lock().unwrap().animations.lock().unwrap().push(self);
+            return animation_controller;
+        }
+        else {
+            panic!("please call the start method from the UI thread");
+        }
     }
 
     fn color_to_argb(color: &Color) -> u32 {
@@ -89,13 +127,13 @@ impl Animation {
     pub fn update(&mut self, item: &mut Item, now: Instant) {
         let elapsed = now - self.start_time;
         let mut progress = (elapsed.as_secs_f64() / self.duration.as_secs_f64()) as f32;
-        let mut is_running = true;
+        let mut is_finished = false;
         if progress >= 1.0 {
             progress = 1.0;
-            is_running = false;
+            is_finished = true;
         }
         else if progress < 0.0 {
-            return;
+            progress = 0.0;
         }
         let from_map = self.from.as_mut().unwrap();
         let to_map = self.to.as_mut().unwrap();
@@ -139,17 +177,17 @@ impl Animation {
 
             stack.extend(item.get_children_mut().iter_mut());
         }
-        if !is_running {
-            self.is_running = false;
+        if is_finished {
+            self.animation_controller.finish();
         }
     }
 
-    pub fn is_running(&self) -> bool {
-        self.is_running
+    pub fn is_finished(&self) -> bool {
+        self.animation_controller.is_finished()
     }
 
-    pub fn duration(mut self, duration: impl Into<AnimationDuration>) -> Self {
-        self.duration = duration.into().duration;
+    pub fn duration(mut self, duration: impl Into<Duration>) -> Self {
+        self.duration = duration.into();
         self
     }
 

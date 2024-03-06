@@ -22,6 +22,8 @@ pub struct ParagraphWrapper {
     byte_length: usize,
 }
 
+unsafe impl Send for ParagraphWrapper {}
+
 impl ParagraphWrapper {
     pub fn new(text: &StyledText, range: Range<usize>, max_width: f32, text_align: TextAlign) -> ParagraphWrapper {
         let mut text_style = TextStyle::default();

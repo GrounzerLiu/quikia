@@ -1,7 +1,7 @@
 pub mod app;
 pub mod property;
 pub mod text;
-pub mod anim;
+pub mod animation;
 pub mod item;
 pub mod theme;
 pub mod component;

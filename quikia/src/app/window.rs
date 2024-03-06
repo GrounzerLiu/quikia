@@ -21,10 +21,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Rect, FontStyle, FontMgr, Data, Picture, ISize, AlphaType, ColorFilter, BlendMode, ImageInfo, Color4f, ImageFilter, SamplingOptions, FilterMode, MipmapMode, Image, TileMode, MaskFilter, BlurStyle};
-use skia_safe::canvas::SaveLayerRec;
-use skia_safe::image_filters::{blur, CropRect};
-use skia_safe::svg::{Canvas, Dom};
+use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Rect, FontStyle, FontMgr, Data, Picture, ISize, AlphaType, ColorFilter, BlendMode, ImageInfo, Color4f, ImageFilter, SamplingOptions, FilterMode, MipmapMode, Image, TileMode, MaskFilter, BlurStyle, Path, Vector, RRect, Canvas};
 use skia_safe::wrapper::PointerWrapper;
 // use winapi::shared::minwindef::TRUE;
 use winit::dpi::{LogicalPosition, PhysicalPosition};
@@ -34,9 +31,9 @@ use winit::event_loop::{EventLoopBuilder, EventLoopWindowTarget};
 use winit::platform::android::activity::AndroidApp;
 #[cfg(target_os = "android")]
 use winit::platform::android::EventLoopBuilderExtAndroid;
+use crate::animation::Animation;
 
-use crate::anim::Animation;
-use crate::app::{ANIMATIONS, new_app, Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
+use crate::app::{new_app, Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
 use crate::item::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
 
 struct Env {
@@ -125,7 +122,7 @@ fn init_env(elwt: &EventLoopWindowTarget<UserEvent>) -> (Env, Window) {
     })
         .expect("Could not create interface");
 
-    let mut gr_context = gpu::DirectContext::new_gl(Some(interface), None)
+    let mut gr_context = gpu::DirectContext::new_gl(interface, None)
         .expect("Could not create direct context");
 
     let fb_info = {
@@ -432,32 +429,29 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
         }
 
         {
-            let mut animations = ANIMATIONS.lock().unwrap();
-            if !animations.is_empty() {
+            let width = app.lock().unwrap().content_width();
+            let height = app.lock().unwrap().content_height();
+            let mut animations = app.lock().unwrap().animations.clone();
+            if !animations.lock().unwrap().is_empty() {
                 let item = pages.current_page().unwrap().root_item_mut();
-                let width = app.content_width();
-                let height = app.content_height();
+                let mut animations = animations.lock().unwrap();
                 for animation in animations.iter_mut() {
-                    if animation.is_running() {
+                    if !animation.is_finished() {
                         if animation.from.is_none() {
                             animation.from = Some(Animation::item_to_layout_params(item));
-                            (animation.layout_transition.action)();
+                            animation.layout_transition.run();
                             item.measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
                             item.layout(0.0, 0.0);
-                            app.lock().unwrap().need_layout = false;
                             animation.to = Some(Animation::item_to_layout_params(item));
                         }
                         animation.update(item, Instant::now());
-                        app.request_redraw();
-                        //elwt.set_control_flow(ControlFlow::Poll);
                     }
                 }
-                animations.retain(|animation| animation.is_running());
-            } else {
-                //elwt.set_control_flow(ControlFlow::Wait);
+                animations.retain(|animation| !animation.is_finished());
+                app.lock().unwrap().request_redraw();
             }
         }
-        println!("loop, {:?}", event_clone);
+        //println!("loop, {:?}", event_clone);
     }).unwrap();
 }
 

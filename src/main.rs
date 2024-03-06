@@ -1,6 +1,5 @@
 mod main_page;
 
-use std::ptr;
 use quikia::app::create_window;
 use quikia::Color;
 use quikia::dpi::{LogicalSize, Size};
@@ -12,6 +11,7 @@ use crate::main_page::MainPage;
 
 #[cfg(not(target_os = "android"))]
 fn main() {
+    
     let window_builder = WindowBuilder::new()
         .with_title("Hello, world!")
         .with_inner_size(Size::Logical(LogicalSize::new(800.0, 600.0)));

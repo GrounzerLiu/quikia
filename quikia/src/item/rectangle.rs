@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
-use skia_safe::{BlurStyle, Canvas, Color, MaskFilter, Paint, Rect, RRect, Vector};
+use skia_safe::{BlurStyle, Canvas, Color, MaskFilter, Paint, Path, Point, Rect, RRect, Vector};
 use crate::app::ThemeColor;
 use crate::item::item::Item;
 use crate::item::{ItemEvent, LayoutDirection, MeasureMode};
@@ -120,12 +120,6 @@ impl Rectangle {
                         let shadow_rect = Rect::from_xywh(rect.left + shadow_offset_x, rect.top + shadow_offset_y, rect.width(), rect.height());
 
                         draw_round_rect(canvas, use_smooth_corners, shadow_rect, radius_left_top, radius_right_top, radius_right_bottom, radius_left_bottom, &shadow_paint);
-
-                        // let mut shadow_paint = Paint::default();
-                        // shadow_paint.set_color(Color::from_argb(0x66, 0, 0, 0));
-                        // shadow_paint.set_mask_filter(MaskFilter::blur(BlurStyle::Normal, 10.0, true));
-                        // let rect = Rect::from_xywh(0.0, 0.0, 100.0, 100.0);
-                        // canvas.draw_round_rect(rect, 10.0, 10.0, &shadow_paint);
 
                         draw_round_rect(canvas, use_smooth_corners, rect, radius_left_top, radius_right_top, radius_right_bottom, radius_left_bottom, &Paint::default().set_anti_alias(true).set_color(color));
 
@@ -346,18 +340,18 @@ fn draw_round_rect(canvas: &Canvas, smooth: bool, rect: Rect, radius_left_top: f
     let radius_right_bottom = radius_right_bottom.clamp(0.0, rect.width() / 2.0).clamp(0.0, rect.height() / 2.0);
     let radius_left_bottom = radius_left_bottom.clamp(0.0, rect.width() / 2.0).clamp(0.0, rect.height() / 2.0);
 
-
+    let instant = std::time::Instant::now();
     if smooth {
-        let mut path = skia_safe::Path::new();
+        let mut path = Path::new();
         path.move_to((rect.left + radius_left_top, rect.top));
         path.line_to((rect.right - radius_right_top, rect.top));
-        path.quad_to((rect.right, rect.top), (rect.right, rect.top + radius_right_top));
+        super_ellipse_curve(&mut path, (rect.right - radius_right_top, rect.top + radius_right_top), radius_right_top,1);
         path.line_to((rect.right, rect.bottom - radius_right_bottom));
-        path.quad_to((rect.right, rect.bottom), (rect.right - radius_right_bottom, rect.bottom));
+        super_ellipse_curve(&mut path, (rect.right - radius_right_bottom, rect.bottom - radius_right_bottom), radius_right_bottom,2);
         path.line_to((rect.left + radius_left_bottom, rect.bottom));
-        path.quad_to((rect.left, rect.bottom), (rect.left, rect.bottom - radius_left_bottom));
+        super_ellipse_curve(&mut path, (rect.left + radius_left_bottom, rect.bottom - radius_left_bottom), radius_left_bottom,3);
         path.line_to((rect.left, rect.top + radius_left_top));
-        path.quad_to((rect.left, rect.top), (rect.left + radius_left_top, rect.top));
+        super_ellipse_curve(&mut path, (rect.left + radius_left_top, rect.top + radius_left_top), radius_left_top,4);
         path.close();
         canvas.draw_path(&path, paint);
     } else {
@@ -370,5 +364,43 @@ fn draw_round_rect(canvas: &Canvas, smooth: bool, rect: Rect, radius_left_top: f
 
         let rrect = RRect::new_rect_radii(rect, &radii);
         canvas.draw_rrect(&rrect, paint);
+    }
+}
+
+fn super_ellipse_curve(path: &mut Path, center: impl Into<Point>, radius: f32, quadrant: u8) {
+    let center = center.into();
+    for x in 0..radius as i32 {
+        let x = x as f32 + 1.0;
+        let y = (radius.powi(3) - x.powi(3)).cbrt();
+        match quadrant {
+            1 => {
+                path.line_to((center.x + x, center.y - y));
+            }
+            2 => {
+                path.line_to((center.x + y, center.y + x));
+            }
+            3 => {
+                path.line_to((center.x - x, center.y + y));
+            }
+            4 => {
+                path.line_to((center.x - y, center.y -x ));
+            }
+            _=>{}
+        }
+    }
+    match quadrant {
+        1 => {
+            path.line_to((center.x + radius, center.y));
+        }
+        2 => {
+            path.line_to((center.x, center.y + radius));
+        }
+        3 => {
+            path.line_to((center.x - radius, center.y));
+        }
+        4 => {
+            path.line_to((center.x, center.y - radius));
+        }
+        _=>{}
     }
 }
