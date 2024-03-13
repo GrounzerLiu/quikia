@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use skia_safe::Canvas;
 use skia_safe::gpu::SyncCpu::No;
 use winit::event::{DeviceId, KeyEvent, MouseButton};
-use crate::app::{current_app, SharedApp};
+use crate::app::{SharedApp};
 use crate::impl_item_property;
-use crate::item::{AdditionalProperty, ButtonState, Gravity, ImeAction, ItemEvent, ItemPath, LayoutDirection, LayoutParams, MeasureMode, PointerAction};
+use crate::ui::{AdditionalProperty, ButtonState, Gravity, ImeAction, ItemEvent, ItemPath, LayoutDirection, LayoutParams, MeasureMode, PointerAction};
 use crate::property::{BoolProperty, FloatProperty, Gettable, GravityProperty, ItemProperty, Observable, Observer, SharedProperty, Size, SizeProperty};
 
 pub struct Item {
@@ -84,8 +84,7 @@ impl_item_property!(Item, enable_clipping, get_enable_clipping, BoolProperty);
 
 
 impl Item {
-    pub fn new(item_events: ItemEvent) -> Self {
-        let app = current_app().unwrap();
+    pub fn new(app: SharedApp, item_events: ItemEvent) -> Self {
         let layout_direction = app.layout_direction();
         Item {
             app,
@@ -182,6 +181,12 @@ impl Item {
     }
 
     pub fn draw(&mut self, canvas: &Canvas) {
+        let layout_params = self.get_layout_params();
+        let content_width = self.app.content_width();
+        let content_height = self.app.content_height();
+        if layout_params.x + layout_params.width < 0.0 || layout_params.x > content_width || layout_params.y + layout_params.height < 0.0 || layout_params.y > content_height {
+            return;
+        }
         unsafe {
             let s = self as *const Item;
             let on_draw = &(*s).on_draw;

@@ -1,5 +1,5 @@
 use skia_safe::Color;
-use crate::item::{AdditionalProperty, Item};
+use crate::ui::{AdditionalProperty, Item};
 use crate::property::{Observable, Observer, SharedProperty};
 
 pub trait ShadowColor {

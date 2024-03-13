@@ -1,6 +1,6 @@
 use skia_safe::Canvas;
 use winit::event::{DeviceId, KeyEvent, MouseButton};
-use crate::item::{ButtonState, ImeAction, Item, MeasureMode, PointerAction, PointerType};
+use crate::ui::{ButtonState, ImeAction, Item, MeasureMode, PointerAction, PointerType};
 use crate::property::Gettable;
 
 

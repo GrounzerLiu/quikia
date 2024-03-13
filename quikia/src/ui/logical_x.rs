@@ -1,5 +1,5 @@
 use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
-use crate::item::LayoutDirection;
+use crate::ui::LayoutDirection;
 
 /// LogicalX is a type that represents a logical x value in a layout.
 /// It can be used to represent the x value of an item in a layout.

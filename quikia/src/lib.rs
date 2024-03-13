@@ -2,7 +2,7 @@ pub mod app;
 pub mod property;
 pub mod text;
 pub mod animation;
-pub mod item;
+pub mod ui;
 pub mod theme;
 pub mod component;
 pub mod layout;

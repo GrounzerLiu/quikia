@@ -6,8 +6,8 @@ use skia_safe::textlayout::TextAlign;
 use winit::dpi::{LogicalPosition, LogicalSize};
 use winit::keyboard::{Key, NamedKey};
 use crate::app::{SharedApp, ThemeColor};
-use crate::item::{Gravity, ImeAction, Item, ItemEvent, LayoutDirection, MeasureMode, PointerAction};
-use crate::item::additional_property::BaseLine;
+use crate::ui::{Gravity, ImeAction, Item, ItemEvent, LayoutDirection, MeasureMode, PointerAction};
+use crate::ui::additional_property::BaseLine;
 use crate::property::{BoolProperty, ColorProperty, FloatProperty, Gettable, Observable, Observer, SharedProperty, TextProperty};
 use crate::text::{EdgeBehavior, ParagraphWrapper, Style, StyledText};
 
@@ -24,7 +24,7 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
-    pub fn new() -> Self {
+    pub fn new(app: SharedApp) -> Self {
         let properties = Arc::new(Mutex::new(TextBlockProperties {
             text: TextProperty::from_value(StyledText::from_str("")),
             editable: BoolProperty::from_value(true),
@@ -38,6 +38,7 @@ impl TextBlock {
         let selection: SharedProperty<Range<usize>> = SharedProperty::from_value(0..0);
 
         let item = Item::new(
+            app,
             ItemEvent::default()
                 .set_on_draw(
                     {

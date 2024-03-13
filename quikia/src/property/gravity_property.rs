@@ -1,4 +1,4 @@
-use crate::item::Gravity;
+use crate::ui::Gravity;
 use crate::property::SharedProperty;
 
 pub type GravityProperty = SharedProperty<Gravity>;

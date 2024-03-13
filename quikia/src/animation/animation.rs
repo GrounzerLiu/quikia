@@ -4,44 +4,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 use material_color_utilities::{blend_cam16ucs, blend_hct_hue};
 use skia_safe::Color;
-use crate::app::current_app;
-use crate::item::{Item, LayoutParams};
-
-/*pub struct  AnimationDuration {
-    pub duration: Duration,
-}
-
-impl AnimationDuration {
-    pub fn new(duration: Duration) -> Self {
-        Self {
-            duration,
-        }
-    }
-}
-
-impl From<Duration> for AnimationDuration {
-    fn from(duration: Duration) -> Self {
-        Self {
-            duration,
-        }
-    }
-}
-
-impl From<u32> for AnimationDuration {
-    fn from(duration: u32) -> Self {
-        Self {
-            duration: Duration::from_millis(duration as u64),
-        }
-    }
-}
-
-impl From<u64> for AnimationDuration {
-    fn from(duration: u64) -> Self {
-        Self {
-            duration: Duration::from_millis(duration),
-        }
-    }
-}*/
+use crate::animation::animation_set::AnimationSet;
+use crate::app::SharedApp;
+use crate::ui::{Item, LayoutParams};
 
 #[derive(Clone)]
 pub struct AnimationController {
@@ -83,36 +48,45 @@ impl LayoutTransition {
 unsafe impl Send for LayoutTransition {}
 
 pub struct Animation {
+    app: SharedApp,
     animation_controller: AnimationController,
     start_time: Instant,
     duration: Duration,
     pub(crate) layout_transition: LayoutTransition,
     pub(crate) from: Option<HashMap<usize, LayoutParams>>,
     pub(crate) to: Option<HashMap<usize, LayoutParams>>,
+    on_start: LinkedList<Box<dyn FnMut()>>,
+    on_finish: LinkedList<Box<dyn FnMut()>>,
 }
 
 impl Animation {
-    pub fn new(layout_transition: impl FnMut() + 'static) -> Self {
+    pub fn new(app: SharedApp, layout_transition: impl FnMut() + 'static) -> Self {
         Self {
+            app,
             animation_controller: AnimationController::new(),
             start_time: Instant::now(),
             duration: Duration::from_millis(2000),
             layout_transition: LayoutTransition::new(layout_transition),
             from: None,
             to: None,
+            on_start: LinkedList::new(),
+            on_finish: LinkedList::new(),
         }
+    }
+
+    pub fn with(mut self, animation: Animation) -> AnimationSet {
+        AnimationSet::new().with(self).with(animation)
     }
 
     pub fn start(mut self) -> AnimationController {
         self.start_time = Instant::now();
-        if let Some(app) = current_app() {
-            let animation_controller = self.animation_controller.clone();
-            app.lock().unwrap().animations.lock().unwrap().push(self);
-            return animation_controller;
-        }
-        else {
-            panic!("please call the start method from the UI thread");
-        }
+        let animation_controller = self.animation_controller.clone();
+        self.on_start.iter_mut().for_each(|on_start| {
+            on_start();
+        });
+        let app = self.app.clone();
+        app.lock().unwrap().animations.lock().unwrap().push(self);
+        return animation_controller;
     }
 
     fn color_to_argb(color: &Color) -> u32 {
@@ -126,21 +100,26 @@ impl Animation {
 
     pub fn update(&mut self, item: &mut Item, now: Instant) {
         let elapsed = now - self.start_time;
-        let mut progress = (elapsed.as_secs_f64() / self.duration.as_secs_f64()) as f32;
+        let mut progress = elapsed.as_secs_f32() / self.duration.as_secs_f32();
         let mut is_finished = false;
         if progress >= 1.0 {
             progress = 1.0;
             is_finished = true;
-        }
-        else if progress < 0.0 {
+        } else if progress < 0.0 {
             progress = 0.0;
+        } else if self.animation_controller.is_finished() {
+            self.on_finish.iter_mut().for_each(|on_finish| {
+                on_finish();
+            });
+            return;
         }
+
         let from_map = self.from.as_mut().unwrap();
         let to_map = self.to.as_mut().unwrap();
         let mut stack = LinkedList::new();
         stack.push_back(item);
         while let Some(item) = stack.pop_back() {
-            if let Some(from)=from_map.get(&item.get_id()){
+            if let Some(from) = from_map.get(&item.get_id()) {
                 let to = to_map.get(&item.get_id()).unwrap();
                 if from != to {
                     let mut layout_params = item.get_layout_params().clone();
@@ -168,8 +147,7 @@ impl Animation {
                         layout_params.color_params.insert(key.clone(), Color::from(argb));
                     });
                     item.set_layout_params(&layout_params);
-                }
-                else {
+                } else {
                     from_map.remove(&item.get_id());
                     to_map.remove(&item.get_id());
                 }
@@ -179,6 +157,9 @@ impl Animation {
         }
         if is_finished {
             self.animation_controller.finish();
+            self.on_finish.iter_mut().for_each(|on_finish| {
+                on_finish();
+            });
         }
     }
 
@@ -191,6 +172,16 @@ impl Animation {
         self
     }
 
+    pub fn on_start(mut self, on_start: impl FnMut() + 'static) -> Self {
+        self.on_start.push_back(Box::new(on_start));
+        self
+    }
+
+    pub fn on_finish(mut self, on_finish: impl FnMut() + 'static) -> Self {
+        self.on_finish.push_back(Box::new(on_finish));
+        self
+    }
+
     pub(crate) fn item_to_layout_params(item: &Item) -> HashMap<usize, LayoutParams> {
         let mut map = HashMap::new();
         let mut stack = LinkedList::new();
@@ -200,5 +191,15 @@ impl Animation {
             stack.extend(item.get_children().iter());
         }
         map
+    }
+}
+
+pub trait AnimationExt {
+    fn animation(&self, layout_transition: impl FnMut() + 'static) -> Animation;
+}
+
+impl AnimationExt for SharedApp {
+    fn animation(&self, layout_transition: impl FnMut() + 'static) -> Animation {
+        Animation::new(self.clone(), layout_transition)
     }
 }

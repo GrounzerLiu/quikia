@@ -1,14 +1,19 @@
+use crate::app::SharedApp;
 use std::ops::Range;
 use std::sync::{Arc, Mutex, RwLock};
 use winit::dpi::LogicalSize;
-use crate::item::additional_property::BaseLine;
-use crate::item::{Item, ItemEvent, LayoutDirection, LayoutParams, LogicalX, measure_child, MeasureMode};
+use crate::ui::additional_property::BaseLine;
+use crate::ui::{Item, ItemEvent, LayoutDirection, LayoutParams, LogicalX, measure_child, MeasureMode};
 use crate::property::{Gettable, SharedProperty, Size};
 
 #[macro_export]
 macro_rules! flex_layout {
-    ($($child:expr)*) => {
-        $crate::layout::FlexLayout::new(vec![$($child),*])
+    ($($child:expr)+) => {
+        {
+            let children = vec![$($child),*];
+            let app = children.first().unwrap().get_app().clone();
+            $crate::layout::FlexLayout::new(app, children)
+        }
     }
 }
 
@@ -98,10 +103,11 @@ pub struct FlexLayout {
 }
 
 impl FlexLayout {
-    pub fn new(children: Vec<Item>) -> Self {
+    pub fn new(app: SharedApp, children: Vec<Item>) -> Self {
         let properties = Arc::new(Mutex::new(FlexLayoutProperties::default()));
 
         let mut item = Item::new(
+            app,
             ItemEvent::default()
                 .set_on_measure({// Measure the layout, get the expected width and height of the layout and its children
                     let properties = properties.clone();

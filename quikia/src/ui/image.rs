@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use lazy_static::lazy_static;
 use skia_safe::{BlendMode, Canvas, Color, Data, FontMgr, M44, Matrix, Paint, Rect, SamplingOptions};
 use skia_safe::canvas::SaveLayerRec;
-use crate::item::{Gravity, Item, ItemEvent, LayoutDirection, MeasureMode};
+use crate::ui::{Gravity, Item, ItemEvent, LayoutDirection, MeasureMode};
 use skia_safe::Image as SkImage;
 use skia_safe::svg::Dom;
 use skia_safe::wrapper::PointerWrapper;
@@ -213,8 +213,8 @@ impl NetworkImage {
                     let image = ImageDrawable::from_bytes(bytes);
                     let mut image_guard = image_clone.write().unwrap();
                     *image_guard = Some(image);
-                    app.request_layout();
-                    app.send_event(UserEvent::Empty);
+                    // app.request_layout();
+                    // app.send_event(UserEvent::Empty);
                     //TODO: Maybe request_layout() not working outside the main thread.
                 }
             }
@@ -308,7 +308,7 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new() -> Self {
+    pub fn new(app: SharedApp) -> Self {
         let properties = Arc::new(Mutex::new(ImageProperties {
             image: None.into(),
             dpi_sensitive: true.into(),
@@ -316,6 +316,7 @@ impl Image {
             undersize_scale_mode: ScaleMode::FitLongerSide.into(),
         }));
         let mut item = Item::new(
+            app,
             ItemEvent::default()
                 .set_on_draw(
                     {

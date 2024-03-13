@@ -8,27 +8,7 @@ use std::thread::ThreadId;
 use winit::event_loop::EventLoopProxy;
 use crate::animation::Animation;
 use crate::app::Theme;
-use crate::item::{ItemPath, LayoutDirection, PointerType};
-
-lazy_static!(
-    pub(crate) static ref APPS:Mutex<LinkedList<(ThreadId, SharedApp)>> = Mutex::new(LinkedList::new());
-);
-
-pub(crate) fn current_app() -> Option<SharedApp> {
-    let current_thread_id = std::thread::current().id();
-    let apps = APPS.lock().unwrap();
-    for app in apps.iter() {
-        if app.0 == current_thread_id {
-            return Some(app.1.clone());
-        }
-    }
-    None
-}
-
-pub(crate) fn new_app(app: SharedApp) {
-    let mut apps = APPS.lock().unwrap();
-    apps.push_back((std::thread::current().id(), app));
-}
+use crate::ui::{ItemPath, LayoutDirection, PointerType};
 
 #[derive(Clone, Debug)]
 pub(crate) enum UserEvent {

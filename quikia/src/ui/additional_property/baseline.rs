@@ -1,4 +1,4 @@
-use crate::item::{AdditionalProperty, Item};
+use crate::ui::{AdditionalProperty, Item};
 
 pub trait BaseLine {
     fn get_baseline(&self) -> Option<f32>;

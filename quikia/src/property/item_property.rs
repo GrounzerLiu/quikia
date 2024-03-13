@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::sync::Mutex;
 use skia_safe::Color;
-use crate::item::{Item, Rectangle};
+use crate::ui::{Item, Rectangle};
 use crate::property::{ColorProperty, Gettable, SharedProperty};
 
 pub type ItemObject= Option<Rc<Mutex<Item>>>;
@@ -27,7 +27,7 @@ impl From<Rectangle> for ItemProperty{
     }
 }
 
-impl From<u32> for ItemProperty{
+/*impl From<u32> for ItemProperty{
     fn from(color: u32) -> Self {
         let item = Rectangle::new().color(color).unwrap();
         Self::from(Some(item))
@@ -49,4 +49,4 @@ impl From<ColorProperty> for ItemProperty{
         item_property.observe(&color_property);
         item_property
     }
-}
+}*/

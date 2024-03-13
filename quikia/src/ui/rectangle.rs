@@ -1,10 +1,10 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use skia_safe::{BlurStyle, Canvas, Color, MaskFilter, Paint, Path, Point, Rect, RRect, Vector};
-use crate::app::ThemeColor;
-use crate::item::item::Item;
-use crate::item::{ItemEvent, LayoutDirection, MeasureMode};
-use crate::item::additional_property::{ShadowBlur, ShadowColor, ShadowOffsetX, ShadowOffsetY};
+use crate::app::{SharedApp, ThemeColor};
+use crate::ui::item::Item;
+use crate::ui::{ItemEvent, LayoutDirection, MeasureMode};
+use crate::ui::additional_property::{ShadowBlur, ShadowColor, ShadowOffsetX, ShadowOffsetY};
 use crate::property::{BoolProperty, ColorProperty, FloatProperty, Gettable, Observable, Observer};
 
 struct RectangleProperties {
@@ -22,7 +22,7 @@ pub struct Rectangle {
 }
 
 impl Rectangle {
-    pub fn new() -> Self {
+    pub fn new(app: SharedApp) -> Self {
         let properties = Arc::new(Mutex::new(RectangleProperties {
             color: ColorProperty::from_value(Color::TRANSPARENT),
             use_smooth_corners: BoolProperty::from_value(false),
@@ -33,6 +33,7 @@ impl Rectangle {
         }));
 
         let mut item = Item::new(
+            app,
             ItemEvent::default()
 
                 .set_on_draw({
@@ -402,5 +403,15 @@ fn super_ellipse_curve(path: &mut Path, center: impl Into<Point>, radius: f32, q
             path.line_to((center.x, center.y - radius));
         }
         _=>{}
+    }
+}
+
+pub trait RectangleExt {
+    fn rectangle(&self) -> Rectangle;
+}
+
+impl RectangleExt for SharedApp {
+    fn rectangle(&self) -> Rectangle {
+        Rectangle::new(self.clone())
     }
 }

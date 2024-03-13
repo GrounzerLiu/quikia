@@ -1,4 +1,5 @@
-use crate::item::{Gravity, Item, ItemEvent, LayoutDirection, LogicalX, measure_child, MeasureMode};
+use crate::app::SharedApp;
+use crate::ui::{Gravity, Item, ItemEvent, LayoutDirection, LogicalX, measure_child, MeasureMode};
 use crate::property::Gettable;
 
 #[macro_export]
@@ -13,8 +14,9 @@ pub struct Stack {
 }
 
 impl Stack {
-    pub fn new(children: Vec<Item>) -> Self {
+    pub fn new(app: SharedApp, children: Vec<Item>) -> Self {
         let mut item = Item::new(
+            app,
             ItemEvent::default()
                 .set_on_measure(
                     |item, width_measure_mode, height_measure_mode| {

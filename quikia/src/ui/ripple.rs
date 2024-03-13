@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use skia_safe::{Canvas, Color, Paint, Rect};
 use crate::animation::Animation;
-use crate::item::item::Item;
-use crate::item::{ItemEvent, LayoutDirection, MeasureMode, PointerAction};
+use crate::app::SharedApp;
+use crate::ui::item::Item;
+use crate::ui::{ItemEvent, LayoutDirection, MeasureMode, PointerAction};
 use crate::property::{BoolProperty, ColorProperty, FloatProperty, Gettable, Observable, Observer};
 
 struct RippleProperties {
@@ -17,7 +18,7 @@ pub struct Ripple {
 }
 
 impl Ripple {
-    pub fn new() -> Self {
+    pub fn new(app: SharedApp) -> Self {
         let properties = Arc::new(Mutex::new(RippleProperties {
             ripple_color: Color::from_argb(0x1F, 0xFF, 0xFF, 0xFF).into(),
         }));
@@ -28,6 +29,7 @@ impl Ripple {
         let max_ripple_radius = FloatProperty::from_value(0.0);
 
         let mut item = Item::new(
+            app,
             ItemEvent::default()
 
                 .set_on_draw({
@@ -155,14 +157,14 @@ impl Ripple {
                             ripple_y.set_value(y);
                             ripple_radius.set_value(0.0);
                             let app = item.get_app();
-                            Animation::new({
-                                let mut ripple_radius = ripple_radius.clone();
-                                let max_ripple_radius = max_ripple_radius.clone();
-                                move || {
-                                    // ripple_radius.set_value(max_ripple_radius.get());
-                                    // app.request_layout();
-                                }
-                            }).duration(Duration::from_millis(1000)).start();
+                            // Animation::new({
+                            //     let mut ripple_radius = ripple_radius.clone();
+                            //     let max_ripple_radius = max_ripple_radius.clone();
+                            //     move || {
+                            //         // ripple_radius.set_value(max_ripple_radius.get());
+                            //         // app.request_layout();
+                            //     }
+                            // }).duration(Duration::from_millis(1000)).start();
                         }
                         false
                     }

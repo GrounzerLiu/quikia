@@ -33,8 +33,8 @@ use winit::platform::android::activity::AndroidApp;
 use winit::platform::android::EventLoopBuilderExtAndroid;
 use crate::animation::Animation;
 
-use crate::app::{new_app, Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
-use crate::item::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
+use crate::app::{Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
+use crate::ui::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
 
 struct Env {
     surface: Surface,
@@ -443,6 +443,7 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                             item.measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
                             item.layout(0.0, 0.0);
                             animation.to = Some(Animation::item_to_layout_params(item));
+                            app.lock().unwrap().need_layout = false;
                         }
                         animation.update(item, Instant::now());
                     }
@@ -461,7 +462,6 @@ pub fn create_window(window_builder: WindowBuilder, theme: Theme, launch_page: B
     event_loop.set_control_flow(ControlFlow::Wait);
 
     let app = SharedApp::new(event_loop.create_proxy(), theme);
-    new_app(app.clone());
 
     run(app, event_loop, launch_page);
 }
