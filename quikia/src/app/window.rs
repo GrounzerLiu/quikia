@@ -1,6 +1,6 @@
 // use winapi::shared::windef::HWND__;
-use std::{ffi::CString, fs, num::NonZeroU32};
-use std::time::Instant;
+use std::{ffi::CString, num::NonZeroU32};
+
 use gl::types::*;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
@@ -14,27 +14,22 @@ use glutin::{
 };
 use glutin::context::NotCurrentGlContext;
 use glutin_winit::DisplayBuilder;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::HasRawWindowHandle;
+use skia_safe::{Color, ColorType, gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Surface};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
-
-use skia_safe::{gpu::{self, backend_render_targets, gl::FramebufferInfo, SurfaceOrigin}, Color, ColorType, Surface, Paint, Point, Font, Rect, FontStyle, FontMgr, Data, Picture, ISize, AlphaType, ColorFilter, BlendMode, ImageInfo, Color4f, ImageFilter, SamplingOptions, FilterMode, MipmapMode, Image, TileMode, MaskFilter, BlurStyle, Path, Vector, RRect, Canvas};
-use skia_safe::wrapper::PointerWrapper;
-// use winapi::shared::minwindef::TRUE;
-use winit::dpi::{LogicalPosition, PhysicalPosition};
-use winit::event::{ElementState, Ime, Touch, TouchPhase};
 use winit::event_loop::{EventLoopBuilder, EventLoopWindowTarget};
 #[cfg(target_os = "android")]
 use winit::platform::android::activity::AndroidApp;
 #[cfg(target_os = "android")]
 use winit::platform::android::EventLoopBuilderExtAndroid;
-use crate::animation::Animation;
 
-use crate::app::{Page, PageStack, SharedApp, Theme, ThemeColor, UserEvent};
-use crate::ui::{ButtonState, ImeAction, ItemPath, MeasureMode, PointerType};
+use crate::app::{SharedApp, Theme, UserEvent};
+use crate::ui::{Item, MeasureMode};
+use crate::widget::{Rectangle, RectangleExt};
 
 struct Env {
     surface: Surface,
@@ -46,12 +41,12 @@ struct Env {
     stencil_size: usize,
 }
 
-fn init_env(elwt: &EventLoopWindowTarget<UserEvent>) -> (Env, Window) {
+fn init_env(elwt: &EventLoopWindowTarget<UserEvent>, window_builder: WindowBuilder) -> (Env, Window) {
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
         .with_transparency(true);
 
-    let display_builder = DisplayBuilder::new().with_window_builder(Some(WindowBuilder::new().with_title("T")));
+    let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
     let (window, gl_config) = display_builder
         .build(elwt, template, |configs| {
             configs
@@ -153,60 +148,29 @@ fn init_env(elwt: &EventLoopWindowTarget<UserEvent>) -> (Env, Window) {
     }, window)
 }
 
-fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Page>) {
-    let mut cursor_position = LogicalPosition::new(0.0_f32, 0.0_f32);
-    let mut physical_cursor_position = PhysicalPosition::new(0.0_f32, 0.0_f32);
-
-    let mut pointer_catch: Vec<(PointerType, usize)> = Vec::new();
-
-    let mut pages = PageStack::new();
-    pages.push(launch_page);
+fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, window_builder: WindowBuilder, ui_generate:Box<dyn Fn(SharedApp)->Item>) {
 
     let mut env = None;
 
-    let mut info = String::new();
-
-    let wallpaper = get_wallpaper();
+    let mut ui = app.rectangle().item();
 
     event_loop.run(move |event, elwt| {
         if let Event::Resumed = event {
-            let (inited_env, window) = init_env(elwt);
-
-            // match window.raw_window_handle() {
-            //     RawWindowHandle::Win32(handle) => {
-            //         //set_acrylic(handle.hwnd)
-            //         /*let d=DWM_BLURBEHIND{
-            //             dwFlags: DWM_BB_ENABLE,
-            //             fEnable: TRUE,
-            //             hRgnBlur: std::ptr::null_mut(),
-            //             fTransitionOnMaximized: TRUE,
-            //         };
-            //         unsafe { DwmEnableBlurBehindWindow(handle.hwnd as *mut HWND__, std::ptr::addr_of!(d)); }
-            //         winapi::um::winuser::SetWindowCom*/
-            //     }
-            //     _=>{}
-            // }
-
-            env = Some(inited_env);
-            app.set_window(window);
-            let current_page_item = pages.current_page().unwrap();
-            let item = current_page_item.page.build(app.clone());
-            current_page_item.page.on_create(app.clone());
-            current_page_item.root_item = Some(item);
+            if env.is_none() {
+                let (inited_env, window) = init_env(elwt, window_builder.clone());
+                env = Some(inited_env);
+                app.set_window(window);
+                ui = ui_generate(app.clone());
+            }        
+            if env.is_none() {
+                panic!("Env is not initialized");
+            }
         }
-
-        if env.is_none() {
-            return;
-        }
-
-        info.clear();
-
-        let event_clone = event.clone();
 
         match event {
-            Event::UserEvent(user_event) => {
+            Event::UserEvent(_user_event) => {
             }
-            Event::WindowEvent { window_id, event } => {
+            Event::WindowEvent { window_id: _window_id, event } => {
                 match event {
                     WindowEvent::CloseRequested => {
                         elwt.exit();
@@ -232,104 +196,29 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
                             NonZeroU32::new(height.max(1)).unwrap(),
                         );
 
-
                         let width = width as f32 / app.scale_factor();
                         let height = height as f32 / app.scale_factor();
-                        pages.iter_mut().for_each(|page_item| {
-                            page_item.root_item_mut().measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
-                            page_item.root_item_mut().layout(0.0, 0.0);
-                        })
+
+                        ui.measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
+                        ui.layout(0.0, 0.0);
                     }
                     WindowEvent::CursorMoved { device_id, position, .. } => {
-                        physical_cursor_position.x = position.x as f32;
-                        physical_cursor_position.y = position.y as f32;
-                        let scale_factor = app.scale_factor();
-                        cursor_position = position.to_logical(scale_factor as f64);
+                        // physical_cursor_position.x = position.x as f32;
+                        // physical_cursor_position.y = position.y as f32;
+                        // let scale_factor = app.scale_factor();
+                        // cursor_position = position.to_logical(scale_factor as f64);
 
-                        pointer_catch.iter().for_each(|(pointer_type, id)| {
-                            match pointer_type {
-                                PointerType::Cursor { mouse_button } => {
-                                    if let Some(item) = pages.current_page().unwrap().find_item_mut(*id) {
-                                        item.mouse_input(
-                                            device_id,
-                                            ButtonState::Moved,
-                                            *mouse_button,
-                                            cursor_position.x,
-                                            cursor_position.y,
-                                        );
-                                    }
-                                }
-                                _ => {}
-                            }
-                        });
-                        pages.current_page().unwrap().root_item_mut().cursor_moved(cursor_position.x, cursor_position.y);
                     }
                     WindowEvent::MouseInput { device_id, state, button } => {
-                        //println!("pointer_catch={:?}", pointer_catch);
-                        match state {
-                            ElementState::Pressed => {
-                                pages.current_page().unwrap()
-                                    .root_item_mut()
-                                    .mouse_input(device_id, state.into(), button, cursor_position.x, cursor_position.y);
-                            }
-                            ElementState::Released => {
-                                pointer_catch.iter().for_each(|(pointer_type, id)| {
-                                    match pointer_type {
-                                        PointerType::Cursor { mouse_button } => {
-                                            if *mouse_button == button {
-                                                if let Some(item) = pages.current_page().unwrap().find_item_mut(*id) {
-                                                    item.mouse_input(
-                                                        device_id,
-                                                        ButtonState::Released,
-                                                        *mouse_button,
-                                                        cursor_position.x,
-                                                        cursor_position.y,
-                                                    );
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                });
-                                pointer_catch.retain(|(pointer_type, _)| {
-                                    match pointer_type {
-                                        PointerType::Cursor { mouse_button } => {
-                                            *mouse_button != button
-                                        }
-                                        _ => true
-                                    }
-                                });
-                            }
-                        }
                     }
 
                     WindowEvent::KeyboardInput {
-                        device_id, event, is_synthetic
+                        device_id: _device_id, event: _event, is_synthetic: _is_synthetic
                     } => {
-                        let app = app.lock().unwrap();
-                        let focused_item_id = app.focused_item_id;
-                        drop(app);
-                        if let Some(focused_item_id) = focused_item_id {
-                            if let Some(item) = pages.current_page().unwrap().find_item_mut(focused_item_id) {
-                                item.keyboard_input(device_id, event, is_synthetic);
-                            }
-                        }
+
                     }
 
                     WindowEvent::Ime(ime) => {
-                        let app = app.lock().unwrap();
-                        let focused_item_id = &app.focused_item_id;
-                        if let Some(focused_item_path) = focused_item_id {
-                            if let Some(item) = pages.current_page().unwrap().find_item_mut(*focused_item_path) {
-                                drop(app);
-                                item.ime_input(match ime {
-                                    Ime::Enabled => ImeAction::Enabled,
-                                    Ime::Preedit(text, cursor_position) => ImeAction::Preedit(text, cursor_position),
-                                    Ime::Commit(text) => ImeAction::Commit(text),
-                                    Ime::Disabled => ImeAction::Disabled,
-                                });
-                            }
-                        }
                     }
 
                     WindowEvent::RedrawRequested => {
@@ -342,50 +231,29 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
             _ => {}
         }
 
-        let pc = app.lock().unwrap().pointer_catch.clone();
-        if let Some(pc) = pc {
-            pointer_catch.push(pc);
-            app.lock().unwrap().pointer_catch = None;
-        }
 
-        {
-            let mut app = app.lock().unwrap();
-            if let Some(request_focus_id) = app.request_focus_id {
-                if let Some(focused_item_id) = app.focused_item_id {
-                    if let Some(focused_item) = pages.current_page().unwrap().find_item_mut(focused_item_id) {
-                        focused_item.invoke_on_blur();
-                    }
-                }
-                if let Some(request_focus_item) = pages.current_page().unwrap().find_item_mut(request_focus_id) {
-                    request_focus_item.invoke_on_focus();
-                    app.focused_item_id = Some(request_focus_id);
-                    app.request_focus_id = None;
-                }
-            }
-        }
+        // if app.lock().unwrap().need_rebuild {
+        //     let mut page_item = pages.current_page().unwrap();
+        //     let mut old_item = page_item.root_item_mut();
+        //     let item = page_item.page.build(app.clone());
+        //     page_item.page.on_create(app.clone());
+        //     page_item.root_item = Some(item);
+        //     app.rebuild_done();
+        //     app.request_layout();
+        // }
 
-        if app.lock().unwrap().need_rebuild {
-            let mut page_item = pages.current_page().unwrap();
-            let mut old_item = page_item.root_item_mut();
-            let item = page_item.page.build(app.clone());
-            page_item.page.on_create(app.clone());
-            page_item.root_item = Some(item);
-            app.rebuild_done();
-            app.request_layout();
-        }
-
-        if app.lock().unwrap().need_layout {
-            let (width, height): (f32, f32) = app.lock().unwrap().window().inner_size().into();
-            let scale_factor = app.scale_factor();
-            let width = width / scale_factor;
-            let height = height / scale_factor;
-            pages.iter_mut().for_each(|page_item| {
-                page_item.root_item_mut().measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
-                page_item.root_item_mut().layout(0.0, 0.0);
-            });
-            app.re_layout_done();
-            app.request_redraw();
-        }
+        // if app.lock().unwrap().need_layout {
+        //     let (width, height): (f32, f32) = app.lock().unwrap().window().inner_size().into();
+        //     let scale_factor = app.scale_factor();
+        //     let width = width / scale_factor;
+        //     let height = height / scale_factor;
+        //     pages.iter_mut().for_each(|page_item| {
+        //         page_item.root_item_mut().measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
+        //         page_item.root_item_mut().layout(0.0, 0.0);
+        //     });
+        //     app.re_layout_done();
+        //     app.request_redraw();
+        // }
 
 
         if app.lock().unwrap().need_redraw {
@@ -394,32 +262,12 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
 
             let canvas = env.surface.canvas();
 
-            canvas.clear(app.lock().unwrap().theme().get_color(ThemeColor::Background));
-            //canvas.clear(Color::from_argb(0x80,0,0,0));
-            // if let Some(wallpaper) = &wallpaper {
-            //     let app = app.lock().unwrap();
-            //     let window = app.window();
-            //     let window_client_position = window.inner_position();
-            //     if let Ok(window_client_position) = window_client_position {
-            //         let x = -window_client_position.x as f32 / scale_factor;
-            //         let y = -window_client_position.y as f32 / scale_factor;
-            //         let mut paint = Paint::default();
-            //         canvas.draw_image_rect(
-            //             wallpaper,
-            //             None,
-            //             Rect::from_xywh(x, y, wallpaper.width() as f32, wallpaper.height() as f32),
-            //             &paint,
-            //         );
-            //     }
-            // }
-
+            canvas.clear(Color::TRANSPARENT);
 
             canvas.save();
             canvas.scale((scale_factor, scale_factor));
 
-            if let Some(page_item) = pages.current_page() {
-                page_item.root_item_mut().draw(canvas);
-            }
+            ui.draw(canvas);
 
             canvas.restore();
 
@@ -429,41 +277,41 @@ fn run(app: SharedApp, event_loop: EventLoop<UserEvent>, launch_page: Box<dyn Pa
         }
 
         {
-            let width = app.lock().unwrap().content_width();
-            let height = app.lock().unwrap().content_height();
-            let mut animations = app.lock().unwrap().animations.clone();
-            if !animations.lock().unwrap().is_empty() {
-                let item = pages.current_page().unwrap().root_item_mut();
-                let mut animations = animations.lock().unwrap();
-                for animation in animations.iter_mut() {
-                    if !animation.is_finished() {
-                        if animation.from.is_none() {
-                            animation.from = Some(Animation::item_to_layout_params(item));
-                            animation.layout_transition.run();
-                            item.measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
-                            item.layout(0.0, 0.0);
-                            animation.to = Some(Animation::item_to_layout_params(item));
-                            app.lock().unwrap().need_layout = false;
-                        }
-                        animation.update(item, Instant::now());
-                    }
-                }
-                animations.retain(|animation| !animation.is_finished());
-                app.lock().unwrap().request_redraw();
-            }
+            // let width = app.lock().unwrap().content_width();
+            // let height = app.lock().unwrap().content_height();
+            // let mut animations = app.lock().unwrap().animations.clone();
+            // if !animations.lock().unwrap().is_empty() {
+            //     let item = pages.current_page().unwrap().root_item_mut();
+            //     let mut animations = animations.lock().unwrap();
+            //     for animation in animations.iter_mut() {
+            //         if !animation.is_finished() {
+            //             if animation.from.is_none() {
+            //                 animation.from = Some(Animation::item_to_layout_params(item));
+            //                 animation.layout_transition.run();
+            //                 item.measure(MeasureMode::Specified(width), MeasureMode::Specified(height));
+            //                 item.layout(0.0, 0.0);
+            //                 animation.to = Some(Animation::item_to_layout_params(item));
+            //                 app.lock().unwrap().need_layout = false;
+            //             }
+            //             animation.update(item, Instant::now());
+            //         }
+            //     }
+            //     animations.retain(|animation| !animation.is_finished());
+            //     app.lock().unwrap().request_redraw();
+            // }
         }
         //println!("loop, {:?}", event_clone);
     }).unwrap();
 }
 
 #[cfg(not(target_os = "android"))]
-pub fn create_window(window_builder: WindowBuilder, theme: Theme, launch_page: Box<dyn Page>) {
+pub fn run_app(window_builder: WindowBuilder, theme: Theme, ui:impl Fn(SharedApp)->Item + 'static){
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build().unwrap();
     event_loop.set_control_flow(ControlFlow::Wait);
 
     let app = SharedApp::new(event_loop.create_proxy(), theme);
 
-    run(app, event_loop, launch_page);
+    run(app, event_loop, window_builder, Box::new(ui));
 }
 
 #[cfg(target_os = "android")]
@@ -501,24 +349,4 @@ fn create_surface(
         None,
     )
         .expect("Could not create skia surface")
-}
-
-fn get_wallpaper() -> Option<Image> {
-    /*if let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey(r"Control Panel\Desktop")
-    {
-        let value: Result<String,_> = key.get_value("Wallpaper");
-        if let Ok(value) = value {
-            if let Ok(bytes) =fs::read(value){
-                let data = Data::new_copy(&bytes);
-                if let Some(image) = Image::from_encoded(data) {
-                    return Some(image);
-                }
-            }
-        }
-        None
-    } else {
-        None
-    }*/
-    None
 }

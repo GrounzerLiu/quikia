@@ -1,11 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::mem::swap;
-use std::ops::{Add, Range};
-use std::slice::Iter;
-use icu::properties::sets::print;
-use icu::segmenter::{GraphemeClusterSegmenter, LineSegmenter};
+use std::ops::Range;
+
+use icu::segmenter::GraphemeClusterSegmenter;
 use skia_safe::{Canvas, Color, FontMgr, FontStyle, Paint, Point};
-use skia_safe::textlayout::{Decoration, FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextBox, TextDecoration, TextDirection, TextRange, TextStyle};
+use skia_safe::textlayout::{FontCollection, Paragraph, ParagraphBuilder, ParagraphStyle, RectHeightStyle, RectWidthStyle, TextAlign, TextBox, TextDecoration, TextDirection, TextRange, TextStyle};
+
 use crate::text::{Style, StyledText};
 
 pub struct ParagraphWrapper {

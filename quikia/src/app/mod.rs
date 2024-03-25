@@ -1,16 +1,15 @@
-mod app;
-mod page;
-mod window;
-mod theme;
-
-use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+
 pub use app::*;
-pub use page::*;
-pub use window::*;
 pub use theme::*;
+pub use window::*;
+
+mod app;
+mod window;
+mod theme;
+
 // use winapi::shared::windef::HWND;
 // use winapi::um::libloaderapi::{GetProcAddress, LoadLibraryA};
 

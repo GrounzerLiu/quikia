@@ -60,7 +60,7 @@ impl TemperatureCache {
         let end_hue = if start_hue_is_coldest_to_warmest { coldest_hue } else { warmest_hue };
         let direction_of_rotation = 1.0;
         let mut smallest_error = 1000.0;
-        let mut answer = *self.get_hcts_by_hue().get((self.input.hue().round()) as usize).unwrap();
+        let mut answer = *self.get_hcts_by_hue().get(self.input.hue().round() as usize).unwrap();
 
         let complement_relative_temp = 1.0 - self.get_relative_temperature(self.input);
         // Find the color in the other section, closest to the inverse percentile
@@ -71,7 +71,7 @@ impl TemperatureCache {
             if !is_between(hue, start_hue, end_hue) {
                 continue;
             }
-            let possible_answer = *self.get_hcts_by_hue().get((hue.round()) as usize).unwrap();
+            let possible_answer = *self.get_hcts_by_hue().get(hue.round() as usize).unwrap();
             let relative_temp =
                 (self.get_temps_by_hct().get(&possible_answer).unwrap() - coldest_temp) / range;
             let error = (complement_relative_temp - relative_temp).abs();

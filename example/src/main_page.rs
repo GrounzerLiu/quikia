@@ -1,4 +1,4 @@
-use std::thread;
+/*use std::thread;
 use std::time::Duration;
 use quikia::animation::{Animation, AnimationExt};
 use quikia::app::{Page, SharedApp, ThemeColor};
@@ -45,6 +45,7 @@ impl Page for MainPage {
         let secondary = app.lock().unwrap().theme().get_color(ThemeColor::Secondary);
         let tertiary = app.lock().unwrap().theme().get_color(ThemeColor::Tertiary);
         let on_surface = app.lock().unwrap().theme().get_color(ThemeColor::OnSurface);
+        let background = app.lock().unwrap().theme().get_color(ThemeColor::Background);
 
         let mut shadow_offset_y = FloatProperty::from_value(5.0);
         let mut shadow_blur = FloatProperty::from_value(5.0);
@@ -59,6 +60,7 @@ impl Page for MainPage {
             .height(100)
         )
             .unwrap()
+            .background(app.rectangle().color(background))
 
 /*        let mut children = vec![];
         children.push(
@@ -235,3 +237,4 @@ impl Page for MainPage {
             })
 */    }
 }
+*/

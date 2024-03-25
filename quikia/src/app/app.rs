@@ -1,19 +1,17 @@
-use std::collections::{HashMap, LinkedList};
 use std::ops::Deref;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use lazy_static::lazy_static;
-use winit::window::Window;
-use std::thread::ThreadId;
+
 use winit::event_loop::EventLoopProxy;
+use winit::window::Window;
+
 use crate::animation::Animation;
 use crate::app::Theme;
-use crate::ui::{ItemPath, LayoutDirection, PointerType};
+use crate::ui::{LayoutDirection, PointerType};
 
 #[derive(Clone, Debug)]
 pub(crate) enum UserEvent {
     Empty,
-    TimerExpired(ItemPath,String)
+    TimerExpired(usize,String)
 }
 
 pub struct App {

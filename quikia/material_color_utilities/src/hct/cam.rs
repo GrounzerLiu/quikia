@@ -111,8 +111,8 @@ impl Cam {
         let hue_radians = h * K_PI / 180.0;
         let jstar = (1.0 + 100.0 * 0.007) * j / (1.0 + 0.007 * j);
         let mstar = 1.0 / 0.0228 * (1.0 + 0.0228 * m).ln();
-        let astar = mstar * (hue_radians).cos();
-        let bstar = mstar * (hue_radians).sin();
+        let astar = mstar * hue_radians.cos();
+        let bstar = mstar * hue_radians.sin();
         Cam { hue: h, chroma: c, j, q, m, s, jstar, astar, bstar }
     }
 

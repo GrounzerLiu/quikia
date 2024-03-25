@@ -1,6 +1,6 @@
 use crate::app::SharedApp;
-use crate::ui::{Gravity, Item, ItemEvent, LayoutDirection, LogicalX, measure_child, MeasureMode};
 use crate::property::Gettable;
+use crate::ui::{Gravity, Item, ItemEvent, LogicalX, measure_child, MeasureMode};
 
 #[macro_export]
 macro_rules! stack {
@@ -36,7 +36,7 @@ impl Stack {
                                 MeasureMode::Unspecified(_) => MeasureMode::Unspecified(remaining_width),
                             };
 
-                            let mut child_occupied_width = 0.0;
+                            let child_occupied_width;
                             let (child_width_measure_mode, child_height_measure_mode) = measure_child(child,&layout_params, width_measure_mode, height_measure_mode);
 
                             let mut child_layout_params = child.get_layout_params().clone();

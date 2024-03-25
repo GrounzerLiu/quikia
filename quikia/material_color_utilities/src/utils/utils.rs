@@ -266,7 +266,7 @@ pub fn hex_from_argb(argb: Argb) -> String {
 pub fn int_from_lstar(lstar: f64) -> Argb {
     let y = y_from_lstar(lstar);
     let component = delinearized(y);
-    argb_from_rgb(component as u8, component as u8, component as u8)
+    argb_from_rgb(component, component, component)
 }
 
 

@@ -1,16 +1,17 @@
 use std::collections::HashMap;
+
 use skia_safe::Canvas;
-use skia_safe::gpu::SyncCpu::No;
 use winit::event::{DeviceId, KeyEvent, MouseButton};
-use crate::app::{SharedApp};
-use crate::impl_item_property;
-use crate::ui::{AdditionalProperty, ButtonState, Gravity, ImeAction, ItemEvent, ItemPath, LayoutDirection, LayoutParams, MeasureMode, PointerAction};
-use crate::property::{BoolProperty, FloatProperty, Gettable, GravityProperty, ItemProperty, Observable, Observer, SharedProperty, Size, SizeProperty};
+
+use crate::app::SharedApp;
+use crate::{children, impl_item_property};
+use crate::property::{BoolProperty, FloatProperty, Gettable, GravityProperty, ItemCollectionProperty, ItemProperty, Observable, Observer, SharedProperty, Size, SizeProperty};
+use crate::ui::{AdditionalProperty, ButtonState, Gravity, ImeAction, ItemEvent, LayoutDirection, LayoutParams, MeasureMode, PointerAction};
 
 pub struct Item {
     app: SharedApp,
     tag: String,
-    children: Vec<Item>,
+    children: ItemCollectionProperty,
     active: BoolProperty,
     width: SizeProperty,
     height: SizeProperty,
@@ -42,19 +43,23 @@ pub struct Item {
     on_focus: Option<Box<dyn Fn()>>,
     on_cursor_entered: Box<dyn Fn()>,
     on_cursor_exited: Box<dyn Fn()>,
+    
+    draw_event: Box<dyn Fn(&mut Item, &Canvas)>,
     on_draw: Box<dyn Fn(&mut Item, &Canvas)>,
-    on_measure: Box<dyn Fn(&mut Item, MeasureMode, MeasureMode)>,
-    on_layout: Box<dyn Fn(&mut Item, f32, f32)>,
-    on_mouse_input: Box<dyn Fn(&mut Item, DeviceId, ButtonState, MouseButton, f32, f32) -> bool>,
     
-    on_cursor_moved: Box<dyn Fn(&mut Item, f32, f32) -> bool>,
-    on_cursor_entered_event: Box<dyn Fn(&mut Item)>,
-    on_cursor_exited_event: Box<dyn Fn(&mut Item)>,
-    is_cursor_inside: bool,
+    measure_event: Box<dyn Fn(&mut Item, MeasureMode, MeasureMode)>,
+    layout_event: Box<dyn Fn(&mut Item, f32, f32, )>,
     
-    on_pointer_input: Box<dyn Fn(&mut Item, PointerAction) -> bool>,
-    on_ime_input: Box<dyn Fn(&mut Item, ImeAction) -> bool>,
-    on_keyboard_input: Box<dyn Fn(&mut Item, DeviceId, KeyEvent, bool) -> bool>,
+    // on_mouse_input: Box<dyn Fn(&mut Item, DeviceId, ButtonState, MouseButton, f32, f32) -> bool>,
+    // 
+    // on_cursor_moved: Box<dyn Fn(&mut Item, f32, f32) -> bool>,
+    // on_cursor_entered_event: Box<dyn Fn(&mut Item)>,
+    // on_cursor_exited_event: Box<dyn Fn(&mut Item)>,
+    // is_cursor_inside: bool,
+    // 
+    // on_pointer_input: Box<dyn Fn(&mut Item, PointerAction) -> bool>,
+    // on_ime_input: Box<dyn Fn(&mut Item, ImeAction) -> bool>,
+    // on_keyboard_input: Box<dyn Fn(&mut Item, DeviceId, KeyEvent, bool) -> bool>,
 }
 
 
@@ -89,7 +94,7 @@ impl Item {
         Item {
             app,
             tag: String::new(),
-            children: Vec::with_capacity(1),
+            children: children!(),
             active: true.into(),
             width: Size::Default.into(),
             height: Size::Default.into(),
@@ -99,7 +104,7 @@ impl Item {
             focusable: true.into(),
             focused: false.into(),
             focusable_when_clicked: true.into(),
-            is_cursor_inside: false,
+            // is_cursor_inside: false,
             min_width: 0.into(),
             min_height: 0.into(),
             max_width: FloatProperty::from_value(f32::MAX),
@@ -122,16 +127,17 @@ impl Item {
             on_focus: None,
             on_cursor_entered: Box::new(|| {}),
             on_cursor_exited: Box::new(|| {}),
+            draw_event: item_events.draw_event,
             on_draw: item_events.on_draw,
-            on_measure: item_events.on_measure,
-            on_layout: item_events.on_layout,
-            on_mouse_input: item_events.on_mouse_input,
-            on_cursor_moved: item_events.on_cursor_moved,
-            on_cursor_entered_event: item_events.on_cursor_entered,
-            on_cursor_exited_event: item_events.on_cursor_exited,
-            on_pointer_input: item_events.on_pointer_input,
-            on_ime_input: item_events.on_ime_input,
-            on_keyboard_input: item_events.on_keyboard_input,
+            measure_event: item_events.measure_event,
+            layout_event: item_events.layout_event,
+            // on_mouse_input: item_events.on_mouse_input,
+            // on_cursor_moved: item_events.on_cursor_moved,
+            // on_cursor_entered_event: item_events.on_cursor_entered,
+            // on_cursor_exited_event: item_events.on_cursor_exited,
+            // on_pointer_input: item_events.on_pointer_input,
+            // on_ime_input: item_events.on_ime_input,
+            // on_keyboard_input: item_events.on_keyboard_input,
         }
     }
 
@@ -152,16 +158,12 @@ impl Item {
         self
     }
 
-    pub fn set_children(&mut self, children: Vec<Item>) {
+    pub fn set_children(&mut self, children: ItemCollectionProperty) {
         self.children = children;
     }
 
-    pub fn get_children(&self) -> &Vec<Item> {
-        &self.children
-    }
-
-    pub fn get_children_mut(&mut self) -> &mut Vec<Item> {
-        &mut self.children
+    pub fn get_children(&self) -> ItemCollectionProperty {
+        self.children.clone()
     }
 
     pub fn set_additional_property(&mut self, key: impl Into<String>, value: impl Into<AdditionalProperty>) {
@@ -184,9 +186,17 @@ impl Item {
         let layout_params = self.get_layout_params();
         let content_width = self.app.content_width();
         let content_height = self.app.content_height();
-        if layout_params.x + layout_params.width < 0.0 || layout_params.x > content_width || layout_params.y + layout_params.height < 0.0 || layout_params.y > content_height {
+        if layout_params.x() + layout_params.width < 0.0 || layout_params.x() > content_width || layout_params.y() + layout_params.height < 0.0 || layout_params.y() > content_height {
             return;
         }
+        unsafe {
+            let s = self as *const Item;
+            let draw_event = &(*s).draw_event;
+            draw_event(self, canvas);
+        }
+    }
+    
+    pub fn on_draw(&mut self, canvas: &Canvas) {
         unsafe {
             let s = self as *const Item;
             let on_draw = &(*s).on_draw;
@@ -197,7 +207,7 @@ impl Item {
     pub fn measure(&mut self, width_measure_mode: MeasureMode, height_measure_mode: MeasureMode) {
         unsafe {
             let s = self as *const Item;
-            let on_measure = &(*s).on_measure;
+            let on_measure = &(*s).measure_event;
             on_measure(self, width_measure_mode, height_measure_mode);
         }
     }
@@ -205,100 +215,100 @@ impl Item {
     pub fn layout(&mut self, x: f32, y: f32) {
         unsafe {
             let s = self as *const Item;
-            let on_layout = &(*s).on_layout;
+            let on_layout = &(*s).layout_event;
             on_layout(self, x, y);
         }
     }
 
-    pub fn mouse_input(&mut self, device_id: DeviceId, state: ButtonState, button: MouseButton, x: f32, y: f32) -> bool
-    {
-        unsafe {
-            let s = self as *const Item;
-            let on_mouse_input = &(*s).on_mouse_input;
-            on_mouse_input(self, device_id, state, button, x, y)
-        }
-    }
-    
-    pub fn cursor_moved(&mut self, x: f32, y: f32) -> bool
-    {
-        if self.get_layout_params().contains(x, y){
-            if !self.is_cursor_inside {
-                self.is_cursor_inside = true;
-                unsafe {
-                    let s = self as *const Item;
-                    let on_cursor_entered_event = &(*s).on_cursor_entered_event;
-                    on_cursor_entered_event(self);
-                    let on_cursor_entered = &(*s).on_cursor_entered;
-                    on_cursor_entered();
-                }
-            }
-        } else {
-            if self.is_cursor_inside {
-                self.is_cursor_inside = false;
-                unsafe {
-                    let s = self as *const Item;
-                    let on_cursor_exited_event = &(*s).on_cursor_exited_event;
-                    on_cursor_exited_event(self);
-                    let on_cursor_exited = &(*s).on_cursor_exited;
-                    on_cursor_exited();
-                }
-            }
-        }
-        unsafe {
-            let s = self as *const Item;
-            let on_cursor_moved = &(*s).on_cursor_moved;
-            let handled = on_cursor_moved(self, x, y);
-            if !handled {
-                for child in self.get_children_mut() {
-                    if child.cursor_moved(x, y) {
-                        return true;
-                    }
-                }
-            }
-            handled
-        }
-    }
-
-    pub fn pointer_input(&mut self, action: PointerAction) -> bool
-    {
-        unsafe {
-            let s = self as *const Item;
-            let on_pointer_input = &(*s).on_pointer_input;
-            on_pointer_input(self, action)
-        }
-    }
-
-    pub fn ime_input(&mut self, action: ImeAction) -> bool {
-        unsafe {
-            let s = self as *const Item;
-            let on_ime_input = &(*s).on_ime_input;
-            let handled = on_ime_input(self, action.clone());
-            if !handled {
-                for child in self.get_children_mut() {
-                    if child.ime_input(action.clone()) {
-                        return true;
-                    }
-                }
-            }
-            handled
-        }
-    }
-
-    pub fn keyboard_input(&mut self, device_id: DeviceId, event: KeyEvent, is_synthetic: bool) -> bool  {
-        unsafe {
-            let s = self as *const Item;
-            let on_keyboard_input = &(*s).on_keyboard_input;
-            let handled = on_keyboard_input(self, device_id, event.clone(), is_synthetic);
-            if !handled {
-                for child in self.get_children_mut() {
-                    if child.keyboard_input(device_id, event.clone(), is_synthetic) {
-                        return true;
-                    }
-                }
-            }
-            handled
-        }
-    }
+    // pub fn mouse_input(&mut self, device_id: DeviceId, state: ButtonState, button: MouseButton, x: f32, y: f32) -> bool
+    // {
+    //     unsafe {
+    //         let s = self as *const Item;
+    //         let on_mouse_input = &(*s).on_mouse_input;
+    //         on_mouse_input(self, device_id, state, button, x, y)
+    //     }
+    // }
+    // 
+    // pub fn cursor_moved(&mut self, x: f32, y: f32) -> bool
+    // {
+    //     if self.get_layout_params().contains(x, y){
+    //         if !self.is_cursor_inside {
+    //             self.is_cursor_inside = true;
+    //             unsafe {
+    //                 let s = self as *const Item;
+    //                 let on_cursor_entered_event = &(*s).on_cursor_entered_event;
+    //                 on_cursor_entered_event(self);
+    //                 let on_cursor_entered = &(*s).on_cursor_entered;
+    //                 on_cursor_entered();
+    //             }
+    //         }
+    //     } else {
+    //         if self.is_cursor_inside {
+    //             self.is_cursor_inside = false;
+    //             unsafe {
+    //                 let s = self as *const Item;
+    //                 let on_cursor_exited_event = &(*s).on_cursor_exited_event;
+    //                 on_cursor_exited_event(self);
+    //                 let on_cursor_exited = &(*s).on_cursor_exited;
+    //                 on_cursor_exited();
+    //             }
+    //         }
+    //     }
+    //     unsafe {
+    //         let s = self as *const Item;
+    //         let on_cursor_moved = &(*s).on_cursor_moved;
+    //         let handled = on_cursor_moved(self, x, y);
+    //         if !handled {
+    //             for child in self.get_children_mut() {
+    //                 if child.cursor_moved(x, y) {
+    //                     return true;
+    //                 }
+    //             }
+    //         }
+    //         handled
+    //     }
+    // }
+    // 
+    // pub fn pointer_input(&mut self, action: PointerAction) -> bool
+    // {
+    //     unsafe {
+    //         let s = self as *const Item;
+    //         let on_pointer_input = &(*s).on_pointer_input;
+    //         on_pointer_input(self, action)
+    //     }
+    // }
+    // 
+    // pub fn ime_input(&mut self, action: ImeAction) -> bool {
+    //     unsafe {
+    //         let s = self as *const Item;
+    //         let on_ime_input = &(*s).on_ime_input;
+    //         let handled = on_ime_input(self, action.clone());
+    //         if !handled {
+    //             for child in self.get_children_mut() {
+    //                 if child.ime_input(action.clone()) {
+    //                     return true;
+    //                 }
+    //             }
+    //         }
+    //         handled
+    //     }
+    // }
+    // 
+    // pub fn keyboard_input(&mut self, device_id: DeviceId, event: KeyEvent, is_synthetic: bool) -> bool  {
+    //     unsafe {
+    //         let s = self as *const Item;
+    //         let on_keyboard_input = &(*s).on_keyboard_input;
+    //         let handled = on_keyboard_input(self, device_id, event.clone(), is_synthetic);
+    //         if !handled {
+    //             for child in self.get_children_mut() {
+    //                 if child.keyboard_input(device_id, event.clone(), is_synthetic) {
+    //                     return true;
+    //                 }
+    //             }
+    //         }
+    //         handled
+    //     }
+    // }
 
     pub fn get_layout_params(&self) -> &LayoutParams {
         &self.layout_params
@@ -308,8 +318,8 @@ impl Item {
         &mut self.layout_params
     }
 
-    pub fn set_layout_params(&mut self, layout_params: &LayoutParams) {
-        self.layout_params = layout_params.clone();
+    pub fn set_layout_params(&mut self, layout_params: impl Into<LayoutParams>) {
+        self.layout_params = layout_params.into();
     }
 
     pub fn on_click(mut self, on_click: impl Fn() + 'static) -> Self {

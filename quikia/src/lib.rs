@@ -6,6 +6,8 @@ pub mod ui;
 pub mod theme;
 pub mod component;
 pub mod layout;
+mod test;
+pub mod widget;
 
 pub use winit::*;
 pub use skia_safe::*;

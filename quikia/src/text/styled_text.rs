@@ -1,9 +1,11 @@
 use std::ops::{Index, Range};
 use std::sync::Mutex;
-use icu::segmenter::{GraphemeClusterBreakIterator, GraphemeClusterBreakIteratorUtf8, GraphemeClusterSegmenter};
+
+use icu::segmenter::GraphemeClusterSegmenter;
+
 use crate::property::{Observable, Observer};
 use crate::text::EdgeBehavior;
-use crate::text::style::{Style};
+use crate::text::style::Style;
 
 pub struct StyledText {
     string: String,

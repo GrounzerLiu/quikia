@@ -18,10 +18,10 @@ reqwest = {version = "0.11.26",features = ["blocking"]}
 material_color_utilities = {path = "material_color_utilities"}
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = {version = "0.3.9", features = ["winreg", "dwmapi", "windef", "winuser"] }
-skia-safe = {version = "0.71.0",features = ["gpu","gl","textlayout","embed-icudtl","svg"]}
+skia-safe = {version = "0.72.0",features = ["gpu","gl","textlayout","embed-icudtl","svg"]}
 
 [target.'cfg(target_os = "linux")'.dependencies]
-skia-safe = {version = "0.71.0",features = ["gpu","gl","textlayout","embed-icudtl","svg", "x11", "wayland"]}
+skia-safe = {version = "0.72.0",features = ["gpu","gl","textlayout","embed-icudtl","svg", "x11", "wayland"]}
 
 
 [target.'cfg(target_os = "android")'.dependencies]

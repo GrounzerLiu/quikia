@@ -6,9 +6,6 @@ mod tone_delta_pair;
 pub use tone_delta_pair::*;
 pub mod material_dynamic_colors;
 
-pub use contrast_curve::*;
-pub use dynamic_color::*;
-pub use tone_delta_pair::*;
 
 #[cfg(test)]
 mod dynamic_color_test {

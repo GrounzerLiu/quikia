@@ -1,10 +1,10 @@
-use crate::app::SharedApp;
 use std::ops::Range;
-use std::sync::{Arc, Mutex, RwLock};
-use winit::dpi::LogicalSize;
-use crate::ui::additional_property::BaseLine;
-use crate::ui::{Item, ItemEvent, LayoutDirection, LayoutParams, LogicalX, measure_child, MeasureMode};
+use std::sync::{Arc, Mutex};
+
+use crate::app::SharedApp;
 use crate::property::{Gettable, SharedProperty, Size};
+use crate::ui::{Item, ItemEvent, LayoutParams, LogicalX, measure_child, MeasureMode};
+use crate::ui::additional_property::BaseLine;
 
 #[macro_export]
 macro_rules! flex_layout {
@@ -301,7 +301,7 @@ impl FlexLayout {
                                                 if properties.rows.len() == 1 {
                                                     y + (height - total_row_height) / 2.0
                                                 } else {
-                                                    let mut space = (height - total_row_height - layout_params.padding_top - layout_params.padding_bottom) / (properties.rows.len()) as f32;
+                                                    let mut space = (height - total_row_height - layout_params.padding_top - layout_params.padding_bottom) / properties.rows.len() as f32;
                                                     if space < 0.0 {
                                                         space = 0.0;
                                                     }
@@ -343,7 +343,7 @@ impl FlexLayout {
                                                 if properties.rows.len() == 1 {
                                                     y + (height - total_row_height) / 2.0
                                                 } else {
-                                                    let mut space = (height - total_row_height - layout_params.padding_top - layout_params.padding_bottom) / (properties.rows.len()) as f32;
+                                                    let mut space = (height - total_row_height - layout_params.padding_top - layout_params.padding_bottom) / properties.rows.len() as f32;
                                                     if space < 0.0 {
                                                         space = 0.0;
                                                     }
@@ -386,7 +386,7 @@ impl FlexLayout {
                                             if row.range.len() == 1 {
                                                 x + (width - row.row_min_width) / 2.0
                                             } else {
-                                                let mut space = (width - row.row_min_width - layout_params.padding_start - layout_params.padding_end) / (row.range.len()) as f32;
+                                                let mut space = (width - row.row_min_width - layout_params.padding_start - layout_params.padding_end) / row.range.len() as f32;
                                                 if space < 0.0 {
                                                     space = 0.0;
                                                 }
@@ -574,7 +574,7 @@ impl FlexLayout {
                                         if properties.rows.len() == 1 {
                                             y + (height - total_row_height) / 2.0
                                         } else {
-                                            let mut space = (height - total_row_height - layout_params.padding_top - layout_params.padding_bottom) / (properties.rows.len()) as f32;
+                                            let mut space = (height - total_row_height - layout_params.padding_top - layout_params.padding_bottom) / properties.rows.len() as f32;
                                             if space < 0.0 {
                                                 space = 0.0;
                                             }
@@ -615,7 +615,7 @@ impl FlexLayout {
                                             if row.range.len() == 1 {
                                                 x + (width - row.row_min_width) / 2.0
                                             } else {
-                                                let mut space = (width - row.row_min_width - layout_params.padding_start - layout_params.padding_end) / (row.range.len()) as f32;
+                                                let mut space = (width - row.row_min_width - layout_params.padding_start - layout_params.padding_end) / row.range.len() as f32;
                                                 if space < 0.0 {
                                                     space = 0.0;
                                                 }

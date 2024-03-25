@@ -1,3 +1,17 @@
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
+
+use lazy_static::lazy_static;
+
+
+pub use bool_property::*;
+pub use color_property::*;
+pub use float_property::*;
+pub use gravity_property::*;
+pub use item_property::*;
+pub use size_property::*;
+pub use text_property::*;
+
 mod float_property;
 mod size_property;
 mod color_property;
@@ -6,20 +20,8 @@ mod item_property;
 mod alignment_property;
 mod text_property;
 mod gravity_property;
-
-use std::ops::{Deref, DerefMut};
-use std::process::id;
-pub use float_property::*;
-pub use size_property::*;
-pub use color_property::*;
-pub use bool_property::*;
-pub use item_property::*;
-pub use alignment_property::*;
-pub use text_property::*;
-pub use gravity_property::*;
-
-use std::sync::{Arc, Mutex};
-use lazy_static::lazy_static;
+mod item_collection_property;
+pub use item_collection_property::*;
 
 lazy_static!(
     pub(crate) static ref OBSERVABLE_ID: Mutex<usize> = Mutex::new(0);
@@ -90,7 +92,7 @@ impl<T> Property<T> {
     pub fn from_generator(value_generator: Box<dyn Fn() -> T>) -> Self {
         Self {
             id: get_observable_id(),
-            value: (value_generator)(),
+            value: value_generator(),
             value_generator: Some(value_generator),
             observers: Arc::new(Mutex::new(Vec::new())),
             observed_properties: Vec::new(),
@@ -128,7 +130,7 @@ impl<T> Property<T> {
         });
         self.observed_properties.clear();
         self.value_generator = Some(value_generator);
-        self.value = (self.value_generator.as_ref().unwrap())();
+        self.value = self.value_generator.as_ref().unwrap()();
         self.notify_observers();
     }
 
@@ -203,7 +205,7 @@ impl<T: 'static> SharedProperty<T> {
         observable.add_observer(Observer::new(move || {
             let mut value = self_clone.lock();
             if let Some(value_generator) = &value.value_generator {
-                value.value = (value_generator)();
+                value.value = value_generator();
             }
             drop(value);
             self_clone.notify();

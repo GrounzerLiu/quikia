@@ -58,9 +58,9 @@ fn create_viewing_conditions(white_point: [f64; 3], adapting_luminance: f64, bac
     d = if d > 1.0 { 1.0 } else if d < 0.0 { 0.0 } else { d };
 
     let nc = f;
-    let rgb_d: [f64; 3] = [(d * (100.0 / rgb_w[0]) + 1.0 - d),
-        (d * (100.0 / rgb_w[1]) + 1.0 - d),
-        (d * (100.0 / rgb_w[2]) + 1.0 - d)];
+    let rgb_d: [f64; 3] = [d * (100.0 / rgb_w[0]) + 1.0 - d,
+        d * (100.0 / rgb_w[1]) + 1.0 - d,
+        d * (100.0 / rgb_w[2]) + 1.0 - d];
 
     let k = 1.0 / (5.0 * adapting_luminance + 1.0);
     let k4 = k * k * k * k;
